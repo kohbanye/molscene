@@ -57,7 +57,8 @@ maturin develop && pytest -m "not network"
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md). Today molscene renders **spheres** and **sticks**
-natively; cartoon, surface, full selections, and a pure-web WASM path are next.
+natively and evaluates a **full selection language** (boolean, spatial,
+aggregation, numeric) in Rust; cartoon, surface, and a pure-web WASM path are next.
 
 ## License
 
