@@ -14,7 +14,7 @@ use pyo3::prelude::*;
 /// Validate a selection string against the core grammar, mapping a parse error
 /// to a Python `ValueError`.
 fn validate_selection(selection: &str) -> PyResult<()> {
-    molscene_core::parse(selection)
+    molscene_core::selection::parse(selection)
         .map(|_| ())
         .map_err(|e| PyValueError::new_err(format!("invalid selection {selection:?}: {e}")))
 }

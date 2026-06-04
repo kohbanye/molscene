@@ -74,8 +74,8 @@ Per-instance color already exists in `GeometrySpec`; this exposes richer ways to
 drive it.
 
 - **Color by property**: B-factor, occupancy, or a user-supplied per-atom array,
-  mapped through a colormap (viridis, etc.). Requires storing B-factor/occupancy
-  on `Atom` (currently dropped during parsing).
+  mapped through a colormap (viridis, etc.). B-factor/occupancy are already stored
+  on `Atom` (added in v0.2); this wires them into color resolution.
 - **Explicit / per-selection color**: override a sub-selection's color within a
   representation (e.g. grey everything, one residue red) without stacking reps;
   a `set_color(selection, color)`-style API.

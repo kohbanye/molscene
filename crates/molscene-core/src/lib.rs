@@ -20,6 +20,6 @@ pub mod parse;
 
 pub use geometry::{Cylinders, GeometrySpec, Spheres};
 pub use scene::Scene;
-pub use selection::{evaluate, parse, CmpOp, Expr, NumField, ParseError};
+pub use selection::{evaluate, CmpOp, Expr, NumField, ParseError};
 pub use spec::{Camera, Representation, RepresentationKind, Source, StructureEntry, Style};
 pub use structure::{covalent_radius, vdw_radius, Atom, Structure};

@@ -114,6 +114,8 @@ pub enum ParseError {
     UnknownKeyword(String),
     /// A number that didn't parse.
     BadNumber(String),
+    /// A spatial radius that was negative.
+    NegativeRadius(f64),
     /// A `resi` range that didn't parse.
     BadRange(String),
     /// Leftover tokens after a complete expression.
@@ -131,6 +133,7 @@ impl std::fmt::Display for ParseError {
             }
             ParseError::UnknownKeyword(k) => write!(f, "unknown selection keyword {k:?}"),
             ParseError::BadNumber(s) => write!(f, "invalid number {s:?}"),
+            ParseError::NegativeRadius(r) => write!(f, "spatial radius must be >= 0, got {r}"),
             ParseError::BadRange(s) => write!(f, "invalid resi range {s:?}"),
             ParseError::TrailingInput(s) => {
                 write!(f, "unexpected trailing input starting at {s:?}")
@@ -350,6 +353,9 @@ impl Parser {
         for kw in ["around", "within", "expand", "beyond"] {
             if self.eat_keyword(kw) {
                 let radius = self.next_number()?;
+                if radius < 0.0 {
+                    return Err(ParseError::NegativeRadius(radius));
+                }
                 self.expect_keyword("of")?;
                 let operand = Box::new(self.parse_unary()?);
                 return Ok(match kw {
@@ -829,6 +835,10 @@ mod tests {
         assert!(matches!(
             parse("frobnicate"),
             Err(ParseError::UnknownKeyword(_))
+        ));
+        assert!(matches!(
+            parse("around -1 of (ligand)"),
+            Err(ParseError::NegativeRadius(_))
         ));
         // a parse error selects nothing (and warns).
         assert!(evaluate(&fixture(), "frobnicate").is_empty());
