@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildInstances, quaternionFromYTo, type GeometrySpec } from "../src/geometry";
+import {
+  buildInstances,
+  quaternionFromYTo,
+  type GeometrySpec,
+} from "../src/geometry";
 
 function approx(a: number[], b: number[], eps = 1e-4) {
   expect(a.length).toBe(b.length);

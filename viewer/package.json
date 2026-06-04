@@ -8,8 +8,8 @@
     "build": "node build.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write \"src/**/*.ts\" build.mjs",
-    "format:check": "prettier --check \"src/**/*.ts\" build.mjs"
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" build.mjs",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" build.mjs"
   },
   "devDependencies": {
     "@types/three": "^0.171.0",
