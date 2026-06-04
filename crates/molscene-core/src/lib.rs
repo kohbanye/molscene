@@ -8,6 +8,7 @@
 //! This crate must never depend on PyO3 or wasm-bindgen — the `molscene-py`
 //! and `molscene-wasm` crates are thin translation shells over this API.
 
+pub mod color;
 pub mod scene;
 pub mod selection;
 pub mod spec;
