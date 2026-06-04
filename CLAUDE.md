@@ -22,7 +22,7 @@ Three Rust crates + a Python facade + a TypeScript viewer:
   `GeometrySpec` draw list).
 - `crates/molscene-py` — thin PyO3 bindings → the `molscene._core` extension module.
 - `crates/molscene-wasm` — wasm-bindgen bindings (stub today; the pure-web path).
-- `python/molscene` — fluent facade (`load`, `Scene`, `ms.sel` DSL, notebook display).
+- `python/molscene` — fluent facade (`load`, `Scene`, `ms.select` DSL, notebook display).
 - `viewer/` — Three.js adapter that draws a `GeometrySpec` (instanced meshes).
 
 The pipeline from `ms.load()` to pixels:
@@ -55,9 +55,15 @@ scene.show()/_repr_html_ # scene.py → _core.to_geometry_json()
 
 ### Current limitations to keep in mind
 
-Composed selections (`& | ~`, spatial) are recorded but not yet evaluated (fall back to
-all). `cartoon`/`surface` are recorded but not drawn (skipped with a warning). Bond
-inference is O(n²). These are tracked as milestones in `ROADMAP.md`.
+`cartoon`/`surface` are recorded but not drawn (skipped with a warning). Bond inference
+is O(n²) (the selection k-d tree only covers spatial queries, not bond inference). These
+are tracked as milestones in `ROADMAP.md`.
+
+Selections are fully evaluated as of v0.2: `selection.rs` parses the string into an
+`Expr` tree (boolean `and`/`or`/`not`, spatial `around`/`within`/`expand`/`beyond` via a
+`kiddo` k-d tree, aggregation `byres`/`bychain`/`bymol`, numeric `b`/`q`). The string
+stays the canonical, hand-editable form in the `Scene` spec; the Python `& | ~` operators
+just compose it. Invalid selections raise `ValueError` (validated in the PyO3 layer).
 
 ## Commands
 

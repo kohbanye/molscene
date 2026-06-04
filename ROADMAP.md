@@ -31,15 +31,17 @@ These constrain every milestone below:
   (CPK / spectrum / chain / named / hex), `GeometrySpec` + `Scene::to_geometry`
   for **spheres** and **sticks**.
 - **Python** (`molscene`): PyO3 `Scene`/`Selection`, `ms.load` (RCSB fetch or
-  local file → parsed in Rust), `ms.sel` DSL with `& | ~`, fluent API,
+  local file → parsed in Rust), `ms.select` DSL with `& | ~`, fluent API,
   `_repr_html_` / `show` / `export_html` via iframe srcdoc.
 - **Viewer** (`viewer/`): Three.js renderer — instanced spheres + cylinders,
   bounding-sphere camera, OrbitControls; bundled offline (no CDN).
+- **Selections** (v0.2): a fully-evaluated selection language in Rust — boolean
+  `and`/`or`/`not`, spatial `around`/`within`/`expand`/`beyond` (kiddo k-d tree),
+  aggregation `byres`/`bychain`/`bymol`, numeric `b`/`q`, parsed from a string and
+  validated (invalid selections raise `ValueError`).
 
 ### Current limitations (these drive the milestones below)
 
-- Composed selections (`& | ~`, spatial) are **recorded but not evaluated** —
-  they fall back to selecting all.
 - **cartoon / surface** are recorded but **not drawn** yet.
 - Bond inference is **O(n²)**; large structures will be slow.
 - Lighting is flat; single colors read muddy.
@@ -47,19 +49,23 @@ These constrain every milestone below:
 
 ---
 
-## v0.2 — Real selections
+## v0.2 — Real selections ✅ (shipped)
 
-Make selection a first-class, fully-evaluated language in Rust.
+Selection is a first-class, fully-evaluated language in Rust.
 
-- Selection **expression tree** in `selection.rs` (replace the string fallback):
-  boolean `and`/`or`/`not`, grouping.
+- Selection **expression tree** in `selection.rs` (tokenizer → recursive-descent
+  parser → `Expr` AST → evaluator, replacing the string fallback): boolean
+  `and`/`or`/`not`, grouping.
 - **Spatial** operators: `around` / `within` / `expand` / `beyond`, backed by a
-  neighbor search (introduce `kiddo` k-d tree).
-- **Aggregation**: `byres` / `bychain` / `bymol`.
-- `ms.sel` builds/serializes the tree; the `& | ~` operators become real.
-- Numeric predicates: `b` / `q` comparisons.
+  `kiddo` k-d tree (behind a `neighbors_within` seam).
+- **Aggregation**: `byres` / `bychain` / `bymol` (`bymol` via union-find over
+  inferred bonds).
+- `ms.select` builds the string; the `& | ~` operators compose it, and the core
+  parses + evaluates it. Invalid selections raise `ValueError`.
+- Numeric predicates: `b` / `q` comparisons (`b_factor`/`occupancy` now stored on
+  `Atom`).
 
-**Deliverable:** `ms.sel.chain("A") & ms.sel.around(ms.sel.ligand(), 5) & ~ms.sel.water()`
+**Deliverable:** `ms.select.chain("A") & ms.select.around(ms.select.ligand(), 5) & ~ms.select.water()`
 evaluates to the right atoms and renders.
 
 ## v0.3 — Coloring
@@ -68,8 +74,8 @@ Per-instance color already exists in `GeometrySpec`; this exposes richer ways to
 drive it.
 
 - **Color by property**: B-factor, occupancy, or a user-supplied per-atom array,
-  mapped through a colormap (viridis, etc.). Requires storing B-factor/occupancy
-  on `Atom` (currently dropped during parsing).
+  mapped through a colormap (viridis, etc.). B-factor/occupancy are already stored
+  on `Atom` (added in v0.2); this wires them into color resolution.
 - **Explicit / per-selection color**: override a sub-selection's color within a
   representation (e.g. grey everything, one residue red) without stacking reps;
   a `set_color(selection, color)`-style API.

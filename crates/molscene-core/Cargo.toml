@@ -10,6 +10,7 @@ description = "Core engine for molscene: structure model, scene graph, selection
 serde = { workspace = true }
 serde_json = { workspace = true }
 pdbtbx = { version = "0.12", optional = true }
+kiddo = { version = "5", default-features = false }
 
 [features]
 default = ["parse"]

@@ -275,6 +275,8 @@ mod tests {
             residue_seq: 1,
             chain_id: "A".into(),
             hetero: false,
+            b_factor: 0.0,
+            occupancy: 1.0,
             x,
             y,
             z,

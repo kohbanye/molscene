@@ -1,8 +1,11 @@
-"""The ``ms.sel`` selection DSL.
+"""The ``ms.select`` selection DSL.
 
-Selections wrap an opaque selection string in v0.1 (the renderer interprets it);
-the boolean operators ``&`` / ``|`` / ``~`` compose them, backed by the Rust
-``_core.Selection`` type. A real expression tree evaluated in Rust lands in v0.2.
+Selections wrap a selection string; the boolean operators ``&`` / ``|`` / ``~``
+compose them, backed by the Rust ``_core.Selection`` type. The core parses the
+string into an expression tree and evaluates it natively — boolean composition,
+spatial operators (``around`` / ``within`` / ``expand`` / ``beyond``),
+aggregation (``byres`` / ``bychain`` / ``bymol``) and numeric ``b`` / ``q``
+predicates. Invalid selections raise ``ValueError`` when added to a scene.
 
 Anything that takes a selection also accepts a plain string.
 """
@@ -22,8 +25,8 @@ def _wrap(value: str) -> Selection:
     return Selection(value)
 
 
-class _Sel:
-    """Namespace of selection constructors, exposed as ``molscene.sel``."""
+class _Select:
+    """Namespace of selection constructors, exposed as ``molscene.select``."""
 
     # Zero-argument macros.
     def all(self) -> Selection:
@@ -69,13 +72,36 @@ class _Sel:
     def element(self, symbol: str) -> Selection:
         return _wrap(f"element {symbol}")
 
-    # Spatial operators (evaluated in v0.2; the strings are recorded now).
+    # Numeric predicates: b-factor / occupancy comparisons.
+    def b(self, op: str, value: float) -> Selection:
+        return _wrap(f"b {op} {value}")
+
+    def q(self, op: str, value: float) -> Selection:
+        return _wrap(f"q {op} {value}")
+
+    # Spatial operators (radius in Å of an operand selection).
     def around(self, selection: SelectionLike, radius: float) -> Selection:
         return _wrap(f"around {radius} of ({selection})")
 
     def within(self, selection: SelectionLike, radius: float) -> Selection:
         return _wrap(f"within {radius} of ({selection})")
 
+    def expand(self, selection: SelectionLike, radius: float) -> Selection:
+        return _wrap(f"expand {radius} of ({selection})")
+
+    def beyond(self, selection: SelectionLike, radius: float) -> Selection:
+        return _wrap(f"beyond {radius} of ({selection})")
+
+    # Aggregation: expand to whole residue / chain / bonded molecule.
+    def byres(self, selection: SelectionLike) -> Selection:
+        return _wrap(f"byres ({selection})")
+
+    def bychain(self, selection: SelectionLike) -> Selection:
+        return _wrap(f"bychain ({selection})")
+
+    def bymol(self, selection: SelectionLike) -> Selection:
+        return _wrap(f"bymol ({selection})")
+
 
 #: The selection DSL namespace.
-sel = _Sel()
+select = _Select()
