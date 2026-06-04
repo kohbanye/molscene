@@ -17,5 +17,6 @@ pub mod structure;
 pub mod parse;
 
 pub use scene::Scene;
+pub use selection::evaluate;
 pub use spec::{Camera, Representation, RepresentationKind, Source, StructureEntry, Style};
 pub use structure::{covalent_radius, vdw_radius, Atom, Structure};
