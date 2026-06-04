@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::spec::{
     default_spec_version, Camera, Representation, RepresentationKind, Source, StructureEntry, Style,
 };
+use crate::structure::Structure;
 
 pub use crate::spec::{Camera as CameraSpec, Representation as RepresentationSpec};
 pub use crate::spec::{RepresentationKind as Kind, Source as StructureSource};
@@ -23,6 +24,10 @@ pub struct Scene {
     structures: Vec<StructureEntry>,
     representations: Vec<Representation>,
     camera: Camera,
+    /// Parsed coordinates, kept in memory for native geometry generation. Not
+    /// part of the serialized scene spec.
+    #[serde(skip)]
+    structure: Option<Structure>,
 }
 
 impl Scene {
@@ -36,17 +41,39 @@ impl Scene {
             }],
             representations: Vec::new(),
             camera: Camera::default(),
+            structure: None,
         }
     }
 
-    /// Create a scene that fetches `id` from RCSB.
+    /// Create a scene that fetches `id` from RCSB (no coordinates loaded yet).
     pub fn from_rcsb(id: impl Into<String>) -> Self {
         Self::new(Source::Rcsb { id: id.into() })
     }
 
-    /// Create a scene from inline PDB text.
+    /// Create a scene from inline PDB text (no coordinates loaded yet).
     pub fn from_inline_pdb(data: impl Into<String>) -> Self {
         Self::new(Source::InlinePdb { data: data.into() })
+    }
+
+    /// Parse `text` and build a scene that holds the resulting coordinates.
+    /// `source` records provenance in the spec (e.g. an RCSB id).
+    #[cfg(feature = "parse")]
+    pub fn from_pdb(text: &str, source: Source) -> Result<Self, crate::parse::ParseError> {
+        let structure = crate::parse::parse_str(text, crate::parse::InputFormat::Pdb)?;
+        let mut scene = Self::new(source);
+        scene.structure = Some(structure);
+        Ok(scene)
+    }
+
+    /// Attach parsed coordinates to the scene.
+    pub fn with_structure(mut self, structure: Structure) -> Self {
+        self.structure = Some(structure);
+        self
+    }
+
+    /// The loaded coordinates, if any.
+    pub fn structure(&self) -> Option<&Structure> {
+        self.structure.as_ref()
     }
 
     fn push(&mut self, kind: RepresentationKind, selection: &str, style: Style) -> &mut Self {

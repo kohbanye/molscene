@@ -9,6 +9,7 @@
 //! and `molscene-wasm` crates are thin translation shells over this API.
 
 pub mod color;
+pub mod geometry;
 pub mod scene;
 pub mod selection;
 pub mod spec;
@@ -17,6 +18,7 @@ pub mod structure;
 #[cfg(feature = "parse")]
 pub mod parse;
 
+pub use geometry::{Cylinders, GeometrySpec, Spheres};
 pub use scene::Scene;
 pub use selection::evaluate;
 pub use spec::{Camera, Representation, RepresentationKind, Source, StructureEntry, Style};
