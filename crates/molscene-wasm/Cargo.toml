@@ -1,0 +1,17 @@
+[package]
+name = "molscene-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "wasm-bindgen bindings for molscene-core (browser scene engine — v0.4)."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# WASM build excludes the `parse` feature (pdbtbx uses rayon/std::fs), so the
+# path dependency is declared directly to honor `default-features = false`.
+molscene-core = { path = "../molscene-core", default-features = false }
+serde_json = { workspace = true }
+wasm-bindgen = "0.2"

@@ -1,0 +1,17 @@
+{
+  "name": "@molscene/viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript adapter: reads a molscene JSON scene spec and drives a WebGL renderer (3Dmol.js in v0.1).",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
