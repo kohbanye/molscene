@@ -1,5 +1,7 @@
 """molscene — notebook-native molecular visualization with a Rust core.
 
+Example::
+
     import molscene as ms
 
     scene = (

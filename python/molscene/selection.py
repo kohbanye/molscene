@@ -21,7 +21,7 @@ Selection = _core.Selection
 SelectionLike = "Selection | str"
 
 
-def _wrap(value: str) -> "Selection":
+def _wrap(value: str) -> Selection:
     return Selection(value)
 
 
@@ -29,77 +29,77 @@ class _Select:
     """Namespace of selection constructors, exposed as ``molscene.select``."""
 
     # Zero-argument macros.
-    def all(self) -> "Selection":
+    def all(self) -> Selection:
         return _wrap("all")
 
-    def none(self) -> "Selection":
+    def none(self) -> Selection:
         return _wrap("none")
 
-    def protein(self) -> "Selection":
+    def protein(self) -> Selection:
         return _wrap("protein")
 
-    def nucleic(self) -> "Selection":
+    def nucleic(self) -> Selection:
         return _wrap("nucleic")
 
-    def ligand(self) -> "Selection":
+    def ligand(self) -> Selection:
         return _wrap("ligand")
 
-    def water(self) -> "Selection":
+    def water(self) -> Selection:
         return _wrap("water")
 
-    def hetero(self) -> "Selection":
+    def hetero(self) -> Selection:
         return _wrap("hetero")
 
-    def backbone(self) -> "Selection":
+    def backbone(self) -> Selection:
         return _wrap("backbone")
 
-    def sidechain(self) -> "Selection":
+    def sidechain(self) -> Selection:
         return _wrap("sidechain")
 
-    def hydrogen(self) -> "Selection":
+    def hydrogen(self) -> Selection:
         return _wrap("hydrogen")
 
     # One-argument predicates.
-    def chain(self, chain_id: str) -> "Selection":
+    def chain(self, chain_id: str) -> Selection:
         return _wrap(f"chain {chain_id}")
 
-    def resn(self, name: str) -> "Selection":
+    def resn(self, name: str) -> Selection:
         return _wrap(f"resn {name}")
 
-    def resi(self, start: int, end: int | None = None) -> "Selection":
+    def resi(self, start: int, end: int | None = None) -> Selection:
         return _wrap(f"resi {start}-{end}" if end is not None else f"resi {start}")
 
-    def element(self, symbol: str) -> "Selection":
+    def element(self, symbol: str) -> Selection:
         return _wrap(f"element {symbol}")
 
     # Numeric predicates: b-factor / occupancy comparisons.
-    def b(self, op: str, value: float) -> "Selection":
+    def b(self, op: str, value: float) -> Selection:
         return _wrap(f"b {op} {value}")
 
-    def q(self, op: str, value: float) -> "Selection":
+    def q(self, op: str, value: float) -> Selection:
         return _wrap(f"q {op} {value}")
 
     # Spatial operators (radius in Å of an operand selection).
-    def around(self, selection: SelectionLike, radius: float) -> "Selection":
+    def around(self, selection: SelectionLike, radius: float) -> Selection:
         return _wrap(f"around {radius} of ({selection})")
 
-    def within(self, selection: SelectionLike, radius: float) -> "Selection":
+    def within(self, selection: SelectionLike, radius: float) -> Selection:
         return _wrap(f"within {radius} of ({selection})")
 
-    def expand(self, selection: SelectionLike, radius: float) -> "Selection":
+    def expand(self, selection: SelectionLike, radius: float) -> Selection:
         return _wrap(f"expand {radius} of ({selection})")
 
-    def beyond(self, selection: SelectionLike, radius: float) -> "Selection":
+    def beyond(self, selection: SelectionLike, radius: float) -> Selection:
         return _wrap(f"beyond {radius} of ({selection})")
 
     # Aggregation: expand to whole residue / chain / bonded molecule.
-    def byres(self, selection: SelectionLike) -> "Selection":
+    def byres(self, selection: SelectionLike) -> Selection:
         return _wrap(f"byres ({selection})")
 
-    def bychain(self, selection: SelectionLike) -> "Selection":
+    def bychain(self, selection: SelectionLike) -> Selection:
         return _wrap(f"bychain ({selection})")
 
-    def bymol(self, selection: SelectionLike) -> "Selection":
+    def bymol(self, selection: SelectionLike) -> Selection:
         return _wrap(f"bymol ({selection})")
 
 

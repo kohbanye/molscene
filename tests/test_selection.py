@@ -3,9 +3,8 @@ native selection evaluator (boolean / spatial / aggregation / numeric)."""
 
 import os
 
-import pytest
-
 import molscene as ms
+import pytest
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "dipeptide.pdb")
 
