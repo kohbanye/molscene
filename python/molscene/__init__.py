@@ -17,9 +17,9 @@ import os
 
 from . import colors
 from .scene import Scene
-from .selection import Selection, sel
+from .selection import Selection, select
 
-__all__ = ["load", "Scene", "Selection", "sel", "colors", "__version__"]
+__all__ = ["load", "Scene", "Selection", "select", "colors", "__version__"]
 __version__ = "0.1.0"
 
 

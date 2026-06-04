@@ -4,12 +4,20 @@
 //! State and serialization live in Rust (`core::Scene`); the Python facade in
 //! `python/molscene/` adds the ergonomic keyword-argument API and notebook
 //! display on top. `Selection` implements the boolean operators in Rust to keep
-//! the `ms.sel` DSL backed by the core.
+//! the `ms.select` DSL backed by the core.
 
 use molscene_core::scene::Scene as CoreScene;
 use molscene_core::spec::{RepresentationKind, Source, Style};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+
+/// Validate a selection string against the core grammar, mapping a parse error
+/// to a Python `ValueError`.
+fn validate_selection(selection: &str) -> PyResult<()> {
+    molscene_core::parse(selection)
+        .map(|_| ())
+        .map_err(|e| PyValueError::new_err(format!("invalid selection {selection:?}: {e}")))
+}
 
 fn parse_kind(kind: &str) -> PyResult<RepresentationKind> {
     Ok(match kind {
@@ -70,6 +78,7 @@ impl Scene {
     /// Add a representation. `style_json` is a JSON object string (or "").
     fn representation(&mut self, kind: &str, selection: &str, style_json: &str) -> PyResult<()> {
         let kind = parse_kind(kind)?;
+        validate_selection(selection)?;
         let style = parse_style(style_json)?;
         match kind {
             RepresentationKind::Cartoon => self.inner.cartoon(selection, style),
@@ -81,8 +90,10 @@ impl Scene {
     }
 
     /// Center the camera on a selection.
-    fn set_center(&mut self, selection: &str) {
+    fn set_center(&mut self, selection: &str) -> PyResult<()> {
+        validate_selection(selection)?;
         self.inner.center(selection);
+        Ok(())
     }
 
     /// Serialize to the JSON scene spec (declarative form).
@@ -96,8 +107,10 @@ impl Scene {
     }
 }
 
-/// A selection. In v0.1 it wraps an opaque selection string; the boolean
-/// operators compose strings. (v0.2 replaces this with a real expression tree.)
+/// A selection. Wraps a selection string; the boolean operators (`& | ~`)
+/// compose it. The core parses and evaluates the string into an expression tree
+/// (boolean / spatial / aggregation / numeric); invalid strings raise
+/// `ValueError` when added to a scene.
 #[pyclass(module = "molscene._core", skip_from_py_object)]
 #[derive(Clone)]
 pub struct Selection {
