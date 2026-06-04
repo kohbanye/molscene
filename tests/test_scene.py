@@ -4,12 +4,10 @@ These use a local fixture (no network). The RCSB fetch path is covered
 separately under the ``network`` marker.
 """
 
-import json
 import os
 
-import pytest
-
 import molscene as ms
+import pytest
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "dipeptide.pdb")
 # dipeptide.pdb: 10 atoms (ALA 5 + GLY 4 + HOH 1), 1 water (HETATM).
@@ -81,7 +79,7 @@ def test_export_html_is_self_contained(tmp_path):
     # Fully offline: nothing is loaded from the network. (URL strings may appear
     # inside the inlined Three.js bundle's license comments — that's fine; what
     # matters is no external <script src>/<link href>.)
-    assert 'src="http' not in text and 'src=&quot;http' not in text
+    assert 'src="http' not in text and "src=&quot;http" not in text
     assert "<link" not in text
 
 

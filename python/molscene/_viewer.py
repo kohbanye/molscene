@@ -42,7 +42,8 @@ def _srcdoc(geometry: dict) -> str:
         "<style>html,body{margin:0;height:100%;overflow:hidden;}"
         "#viewport{position:relative;width:100%;height:100vh;}</style></head><body>"
         "<div id='viewport'></div>"
-        f"<script type='application/json' id='molscene-geometry'>{geometry_json}</script>"
+        "<script type='application/json' id='molscene-geometry'>"
+        f"{geometry_json}</script>"
         f"<script>{viewer_js}</script>"
         "<script>(function(){var g=JSON.parse("
         "document.getElementById('molscene-geometry').textContent);"
@@ -52,7 +53,9 @@ def _srcdoc(geometry: dict) -> str:
     )
 
 
-def render_html(geometry: dict, *, height: int = DEFAULT_HEIGHT, width: str = "100%") -> str:
+def render_html(
+    geometry: dict, *, height: int = DEFAULT_HEIGHT, width: str = "100%"
+) -> str:
     """Return an iframe (escaped srcdoc) that renders the geometry with Three.js."""
     srcdoc = _srcdoc(geometry)
     escaped = html.escape(srcdoc, quote=True)

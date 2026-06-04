@@ -1,14 +1,14 @@
 """molscene — notebook-native molecular visualization with a Rust core.
 
-    import molscene as ms
+import molscene as ms
 
-    scene = (
-        ms.load("1ubq")
-        .cartoon("protein", color="spectrum")
-        .surface("protein", opacity=0.25)
-        .sticks("ligand", color="element")
-    )
-    scene.show()
+scene = (
+    ms.load("1ubq")
+    .cartoon("protein", color="spectrum")
+    .surface("protein", opacity=0.25)
+    .sticks("ligand", color="element")
+)
+scene.show()
 """
 
 from __future__ import annotations

@@ -60,7 +60,10 @@ function midpoint(a: Vec3, b: Vec3): Vec3 {
 }
 
 /** Per-instance transforms for every sphere and cylinder in the spec. */
-export function buildInstances(spec: GeometrySpec): { spheres: Instance[]; cylinders: Instance[] } {
+export function buildInstances(spec: GeometrySpec): {
+  spheres: Instance[];
+  cylinders: Instance[];
+} {
   const spheres: Instance[] = spec.spheres.centers.map((center, i) => {
     const r = spec.spheres.radii[i];
     return {

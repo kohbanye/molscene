@@ -18,18 +18,24 @@ ELEMENT_COLORS: dict[str, tuple[float, float, float]] = {
 # Secondary-structure colors. PyMOL has no hard-coded SS palette; these are
 # molscene's own sensible defaults, applied when ``color="secondary_structure"``.
 SS_COLORS: dict[str, tuple[float, float, float]] = {
-    "helix": (1.0, 0.3, 0.3),   # red
-    "sheet": (1.0, 0.9, 0.2),   # yellow
-    "loop": (0.9, 0.9, 0.9),    # light grey
+    "helix": (1.0, 0.3, 0.3),  # red
+    "sheet": (1.0, 0.9, 0.2),  # yellow
+    "loop": (0.9, 0.9, 0.9),  # light grey
 }
 
 # Cycling palette for by-chain coloring (PyMOL AutoColor, Color.cpp:35).
 CHAIN_PALETTE: list[str] = [
-    "cyan", "magenta", "yellow", "salmon", "slate",
-    "orange", "lime", "deepteal", "hotpink", "wheat",
+    "cyan",
+    "magenta",
+    "yellow",
+    "salmon",
+    "slate",
+    "orange",
+    "lime",
+    "deepteal",
+    "hotpink",
+    "wheat",
 ]
 
 #: Named color schemes accepted by the ``color=`` argument.
-COLOR_SCHEMES = frozenset(
-    {"element", "spectrum", "secondary_structure", "chain"}
-)
+COLOR_SCHEMES = frozenset({"element", "spectrum", "secondary_structure", "chain"})
