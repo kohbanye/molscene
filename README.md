@@ -54,6 +54,11 @@ cd viewer && npm install && npm test
 maturin develop && pytest -m "not network"
 ```
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md). Today molscene renders **spheres** and **sticks**
+natively; cartoon, surface, full selections, and a pure-web WASM path are next.
+
 ## License
 
 Dual-licensed under MIT OR Apache-2.0.
