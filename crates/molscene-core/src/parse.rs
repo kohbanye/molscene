@@ -75,6 +75,8 @@ pub fn parse_str(text: &str, format: InputFormat) -> Result<Structure, ParseErro
             residue_seq: hier.residue().id().0 as i32,
             chain_id: hier.chain().id().to_string(),
             hetero: atom.hetero(),
+            b_factor: atom.b_factor(),
+            occupancy: atom.occupancy(),
             x,
             y,
             z,
@@ -126,5 +128,7 @@ mod tests {
         assert_eq!(first.chain_id, "A");
         assert!(!first.hetero);
         assert!((first.x - 11.104).abs() < 1e-3);
+        assert!((first.b_factor - 20.0).abs() < 1e-3);
+        assert!((first.occupancy - 1.0).abs() < 1e-3);
     }
 }

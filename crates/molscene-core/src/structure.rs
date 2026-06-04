@@ -23,6 +23,10 @@ pub struct Atom {
     pub chain_id: String,
     /// `true` for `HETATM` records (ligands, water, ions).
     pub hetero: bool,
+    /// Temperature (B) factor; drives `b` predicates and B-factor coloring.
+    pub b_factor: f64,
+    /// Occupancy; drives `q` predicates.
+    pub occupancy: f64,
     pub x: f64,
     pub y: f64,
     pub z: f64,
@@ -171,6 +175,8 @@ mod tests {
             residue_seq: 1,
             chain_id: "A".into(),
             hetero: false,
+            b_factor: 0.0,
+            occupancy: 1.0,
             x,
             y,
             z,
