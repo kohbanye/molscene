@@ -76,4 +76,129 @@ impl Structure {
     pub fn num_hetero(&self) -> usize {
         self.atoms.iter().filter(|a| a.hetero).count()
     }
+
+    /// Infer covalent bonds from interatomic distances.
+    ///
+    /// Two atoms are bonded when their distance is below the sum of their
+    /// covalent radii plus a tolerance, and above a small floor (to reject
+    /// duplicate/overlapping atoms). Returns index pairs with `i < j`.
+    ///
+    /// O(n²) for now — fine for typical single structures (~hundreds to a few
+    /// thousand atoms); a spatial grid can replace this for very large inputs.
+    pub fn bonds(&self) -> Vec<(usize, usize)> {
+        const TOLERANCE: f64 = 0.45;
+        const FLOOR_SQ: f64 = 0.16; // (0.4 Å)²
+        let mut bonds = Vec::new();
+        for i in 0..self.atoms.len() {
+            let a = &self.atoms[i];
+            let ra = covalent_radius(&a.element);
+            for j in (i + 1)..self.atoms.len() {
+                let b = &self.atoms[j];
+                let cutoff = ra + covalent_radius(&b.element) + TOLERANCE;
+                let dx = a.x - b.x;
+                let dy = a.y - b.y;
+                let dz = a.z - b.z;
+                let d2 = dx * dx + dy * dy + dz * dz;
+                if d2 > FLOOR_SQ && d2 < cutoff * cutoff {
+                    bonds.push((i, j));
+                }
+            }
+        }
+        bonds
+    }
+}
+
+/// Van der Waals radius (Å) for an element symbol; falls back to carbon's.
+pub fn vdw_radius(element: &str) -> f32 {
+    match normalize(element).as_str() {
+        "H" => 1.10,
+        "C" => 1.70,
+        "N" => 1.55,
+        "O" => 1.52,
+        "S" => 1.80,
+        "P" => 1.80,
+        "F" => 1.47,
+        "CL" => 1.75,
+        "BR" => 1.85,
+        "I" => 1.98,
+        "FE" => 1.80,
+        "ZN" => 1.39,
+        "MG" => 1.73,
+        "NA" => 2.27,
+        "CA" => 2.31,
+        "K" => 2.75,
+        _ => 1.70,
+    }
+}
+
+/// Covalent radius (Å) for an element symbol (Cordero 2008); fallback ~carbon.
+pub fn covalent_radius(element: &str) -> f64 {
+    match normalize(element).as_str() {
+        "H" => 0.31,
+        "C" => 0.76,
+        "N" => 0.71,
+        "O" => 0.66,
+        "S" => 1.05,
+        "P" => 1.07,
+        "F" => 0.57,
+        "CL" => 1.02,
+        "BR" => 1.20,
+        "I" => 1.39,
+        "FE" => 1.32,
+        "ZN" => 1.22,
+        "MG" => 1.41,
+        "NA" => 1.66,
+        "CA" => 1.76,
+        "K" => 2.03,
+        _ => 0.77,
+    }
+}
+
+fn normalize(element: &str) -> String {
+    element.trim().to_ascii_uppercase()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn carbon(serial: usize, x: f64, y: f64, z: f64) -> Atom {
+        Atom {
+            serial,
+            name: "C".into(),
+            element: "C".into(),
+            residue_name: "LIG".into(),
+            residue_seq: 1,
+            chain_id: "A".into(),
+            hetero: false,
+            x,
+            y,
+            z,
+        }
+    }
+
+    #[test]
+    fn bonds_by_distance() {
+        // C1-C2 = 1.5 Å (bond), C2-C3 = 1.5 Å (bond), C1-C3 = 3.0 Å (no bond).
+        let s = Structure::new(vec![
+            carbon(1, 0.0, 0.0, 0.0),
+            carbon(2, 1.5, 0.0, 0.0),
+            carbon(3, 3.0, 0.0, 0.0),
+        ]);
+        assert_eq!(s.bonds(), vec![(0, 1), (1, 2)]);
+    }
+
+    #[test]
+    fn overlapping_atoms_do_not_bond() {
+        let s = Structure::new(vec![carbon(1, 0.0, 0.0, 0.0), carbon(2, 0.05, 0.0, 0.0)]);
+        assert!(s.bonds().is_empty());
+    }
+
+    #[test]
+    fn radii_lookup_with_fallback() {
+        assert_eq!(vdw_radius("C"), 1.70);
+        assert_eq!(vdw_radius("o"), 1.52); // case-insensitive
+        assert_eq!(vdw_radius("Xx"), 1.70); // fallback
+        assert_eq!(covalent_radius("O"), 0.66);
+    }
 }

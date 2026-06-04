@@ -18,4 +18,4 @@ pub mod parse;
 
 pub use scene::Scene;
 pub use spec::{Camera, Representation, RepresentationKind, Source, StructureEntry, Style};
-pub use structure::{Atom, Structure};
+pub use structure::{covalent_radius, vdw_radius, Atom, Structure};
