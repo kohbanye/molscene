@@ -22,18 +22,25 @@ scene.show()   # interactive 3D in Jupyter / Colab / VS Code
 Python fluent API ─┐
                    ├─ molscene-py (PyO3)      ─┐
 browser / JS API  ─┤                          ├─ molscene-core (pure Rust)
-                   └─ molscene-wasm            ┘   Structure / Scene / Selection / spec
-                                                        │ to_json()
-                                              JSON scene spec (versioned contract)
+                   └─ molscene-wasm            ┘   Structure / Scene / Selection / geometry
+                                                        │ to_geometry()
+                                              GeometrySpec (instanced spheres + cylinders)
                                                         ↓
-                                              viewer/ (TypeScript) → 3Dmol.js → notebook / browser
+                                              viewer/ (Three.js — knows nothing about molecules)
+                                                        ↓
+                                                  notebook / browser
 ```
 
-- **`crates/molscene-core`** — renderer- and binding-agnostic engine (Rust).
+molscene owns all molecular processing (parse, selection, **geometry generation**,
+color) in Rust and treats the renderer as a dumb 3D canvas. v0.1 renders
+**spheres** and **sticks**; cartoon/surface are a follow-up.
+
+- **`crates/molscene-core`** — renderer- and binding-agnostic engine (Rust): structure,
+  selection, color, and geometry compilation to a `GeometrySpec`.
 - **`crates/molscene-py`** — PyO3 bindings → the `molscene._core` extension module.
 - **`crates/molscene-wasm`** — wasm-bindgen bindings for the future browser product.
 - **`python/molscene`** — thin fluent facade, notebook display.
-- **`viewer/`** — TS adapter that turns a scene spec into renderer calls.
+- **`viewer/`** — Three.js adapter that draws a `GeometrySpec` (instanced meshes).
 
 ## Development
 
