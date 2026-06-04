@@ -41,3 +41,11 @@ include = [{ path = "python/molscene/_static/viewer.js", format = "wheel" }]
 testpaths = ["tests"]
 markers = ["network: tests that hit the network (RCSB); skipped by default in CI"]
 addopts = "-m 'not network'"
+
+[tool.ruff]
+target-version = "py310"
+extend-exclude = ["python/molscene/_static"]
+
+[tool.ruff.lint]
+# pycodestyle errors (E), Pyflakes (F), isort (I), pyupgrade (UP), flake8-bugbear (B).
+select = ["E", "F", "I", "UP", "B"]

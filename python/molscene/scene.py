@@ -15,44 +15,50 @@ from ._viewer import DEFAULT_HEIGHT, render_html
 
 
 class Scene:
-    def __init__(self, core: "_core.Scene") -> None:
+    def __init__(self, core: _core.Scene) -> None:
         self._core = core
 
     # -- constructors -------------------------------------------------------
     @classmethod
-    def from_rcsb(cls, pdb_id: str, pdb_text: str) -> "Scene":
+    def from_rcsb(cls, pdb_id: str, pdb_text: str) -> Scene:
         return cls(_core.Scene.from_rcsb(pdb_id, pdb_text))
 
     @classmethod
-    def from_inline_pdb(cls, pdb_text: str) -> "Scene":
+    def from_inline_pdb(cls, pdb_text: str) -> Scene:
         return cls(_core.Scene.from_inline_pdb(pdb_text))
 
     # -- representations ----------------------------------------------------
-    def _add(self, kind: str, selection: Any, color, opacity, style: dict) -> "Scene":
+    def _add(self, kind: str, selection: Any, color, opacity, style: dict) -> Scene:
         if color is not None:
             style["color"] = color
         if opacity is not None:
             style["opacity"] = opacity
-        self._core.representation(kind, str(selection), json.dumps(style) if style else "")
+        self._core.representation(
+            kind, str(selection), json.dumps(style) if style else ""
+        )
         return self
 
-    def cartoon(self, selection: Any = "protein", *, color=None, opacity=None,
-                **style: Any) -> "Scene":
+    def cartoon(
+        self, selection: Any = "protein", *, color=None, opacity=None, **style: Any
+    ) -> Scene:
         return self._add("cartoon", selection, color, opacity, style)
 
-    def surface(self, selection: Any = "protein", *, color=None, opacity=None,
-                **style: Any) -> "Scene":
+    def surface(
+        self, selection: Any = "protein", *, color=None, opacity=None, **style: Any
+    ) -> Scene:
         return self._add("surface", selection, color, opacity, style)
 
-    def sticks(self, selection: Any = "ligand", *, color=None, opacity=None,
-               **style: Any) -> "Scene":
+    def sticks(
+        self, selection: Any = "ligand", *, color=None, opacity=None, **style: Any
+    ) -> Scene:
         return self._add("sticks", selection, color, opacity, style)
 
-    def spheres(self, selection: Any = "all", *, color=None, opacity=None,
-                **style: Any) -> "Scene":
+    def spheres(
+        self, selection: Any = "all", *, color=None, opacity=None, **style: Any
+    ) -> Scene:
         return self._add("spheres", selection, color, opacity, style)
 
-    def center(self, selection: Any = None) -> "Scene":
+    def center(self, selection: Any = None) -> Scene:
         if selection is not None:
             self._core.set_center(str(selection))
         return self
@@ -78,8 +84,9 @@ class Scene:
 
         return HTML(render_html(self.to_geometry(), height=height, width=width))
 
-    def export_html(self, path: str, *, height: int = DEFAULT_HEIGHT,
-                    width: str = "100%") -> str:
+    def export_html(
+        self, path: str, *, height: int = DEFAULT_HEIGHT, width: str = "100%"
+    ) -> str:
         markup = render_html(self.to_geometry(), height=height, width=width)
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(markup)

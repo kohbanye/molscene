@@ -11,7 +11,10 @@ function instancedMesh(
   base: THREE.BufferGeometry,
   instances: Instance[],
 ): THREE.InstancedMesh {
-  const material = new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.0 });
+  const material = new THREE.MeshStandardMaterial({
+    roughness: 0.4,
+    metalness: 0.0,
+  });
   const mesh = new THREE.InstancedMesh(base, material, instances.length);
   const m = new THREE.Matrix4();
   const pos = new THREE.Vector3();
@@ -20,11 +23,19 @@ function instancedMesh(
   const color = new THREE.Color();
   instances.forEach((inst, i) => {
     pos.set(inst.position[0], inst.position[1], inst.position[2]);
-    quat.set(inst.quaternion[0], inst.quaternion[1], inst.quaternion[2], inst.quaternion[3]);
+    quat.set(
+      inst.quaternion[0],
+      inst.quaternion[1],
+      inst.quaternion[2],
+      inst.quaternion[3],
+    );
     scl.set(inst.scale[0], inst.scale[1], inst.scale[2]);
     m.compose(pos, quat, scl);
     mesh.setMatrixAt(i, m);
-    mesh.setColorAt(i, color.setRGB(inst.color[0], inst.color[1], inst.color[2]));
+    mesh.setColorAt(
+      i,
+      color.setRGB(inst.color[0], inst.color[1], inst.color[2]),
+    );
   });
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -32,7 +43,10 @@ function instancedMesh(
 }
 
 /** Render a geometry spec into `element`. Returns the renderer for disposal. */
-export function renderGeometry(element: HTMLElement, spec: GeometrySpec): THREE.WebGLRenderer {
+export function renderGeometry(
+  element: HTMLElement,
+  spec: GeometrySpec,
+): THREE.WebGLRenderer {
   const width = element.clientWidth || 640;
   const height = element.clientHeight || 480;
 
@@ -49,7 +63,9 @@ export function renderGeometry(element: HTMLElement, spec: GeometrySpec): THREE.
   }
   if (cylinders.length) {
     // Unit cylinder along +Y, height 1 centered at the origin.
-    scene.add(instancedMesh(new THREE.CylinderGeometry(1, 1, 1, 16), cylinders));
+    scene.add(
+      instancedMesh(new THREE.CylinderGeometry(1, 1, 1, 16), cylinders),
+    );
   }
 
   // Lighting.
@@ -61,7 +77,12 @@ export function renderGeometry(element: HTMLElement, spec: GeometrySpec): THREE.
   // Camera fit to the bounding sphere.
   const { center, radius } = spec.camera;
   const fov = 45;
-  const camera = new THREE.PerspectiveCamera(fov, width / height, 0.1, radius * 100 + 100);
+  const camera = new THREE.PerspectiveCamera(
+    fov,
+    width / height,
+    0.1,
+    radius * 100 + 100,
+  );
   const target = new THREE.Vector3(center[0], center[1], center[2]);
   const distance = radius / Math.sin((fov * Math.PI) / 360);
   camera.position.set(center[0], center[1], center[2] + distance);

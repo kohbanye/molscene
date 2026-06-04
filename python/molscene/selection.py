@@ -18,7 +18,7 @@ Selection = _core.Selection
 SelectionLike = "Selection | str"
 
 
-def _wrap(value: str) -> "Selection":
+def _wrap(value: str) -> Selection:
     return Selection(value)
 
 
@@ -26,54 +26,54 @@ class _Sel:
     """Namespace of selection constructors, exposed as ``molscene.sel``."""
 
     # Zero-argument macros.
-    def all(self) -> "Selection":
+    def all(self) -> Selection:
         return _wrap("all")
 
-    def none(self) -> "Selection":
+    def none(self) -> Selection:
         return _wrap("none")
 
-    def protein(self) -> "Selection":
+    def protein(self) -> Selection:
         return _wrap("protein")
 
-    def nucleic(self) -> "Selection":
+    def nucleic(self) -> Selection:
         return _wrap("nucleic")
 
-    def ligand(self) -> "Selection":
+    def ligand(self) -> Selection:
         return _wrap("ligand")
 
-    def water(self) -> "Selection":
+    def water(self) -> Selection:
         return _wrap("water")
 
-    def hetero(self) -> "Selection":
+    def hetero(self) -> Selection:
         return _wrap("hetero")
 
-    def backbone(self) -> "Selection":
+    def backbone(self) -> Selection:
         return _wrap("backbone")
 
-    def sidechain(self) -> "Selection":
+    def sidechain(self) -> Selection:
         return _wrap("sidechain")
 
-    def hydrogen(self) -> "Selection":
+    def hydrogen(self) -> Selection:
         return _wrap("hydrogen")
 
     # One-argument predicates.
-    def chain(self, chain_id: str) -> "Selection":
+    def chain(self, chain_id: str) -> Selection:
         return _wrap(f"chain {chain_id}")
 
-    def resn(self, name: str) -> "Selection":
+    def resn(self, name: str) -> Selection:
         return _wrap(f"resn {name}")
 
-    def resi(self, start: int, end: int | None = None) -> "Selection":
+    def resi(self, start: int, end: int | None = None) -> Selection:
         return _wrap(f"resi {start}-{end}" if end is not None else f"resi {start}")
 
-    def element(self, symbol: str) -> "Selection":
+    def element(self, symbol: str) -> Selection:
         return _wrap(f"element {symbol}")
 
     # Spatial operators (evaluated in v0.2; the strings are recorded now).
-    def around(self, selection: SelectionLike, radius: float) -> "Selection":
+    def around(self, selection: SelectionLike, radius: float) -> Selection:
         return _wrap(f"around {radius} of ({selection})")
 
-    def within(self, selection: SelectionLike, radius: float) -> "Selection":
+    def within(self, selection: SelectionLike, radius: float) -> Selection:
         return _wrap(f"within {radius} of ({selection})")
 
 
