@@ -23,20 +23,24 @@ __all__ = ["load", "Scene", "Selection", "sel", "colors", "__version__"]
 __version__ = "0.1.0"
 
 
-def _looks_like_pdb_id(source: str) -> bool:
-    return len(source) == 4 and source[0].isdigit() and source.isalnum()
+def _fetch_rcsb_pdb(pdb_id: str) -> str:
+    """Download a PDB file from RCSB (the only network access in molscene)."""
+    import urllib.request
+
+    url = f"https://files.rcsb.org/download/{pdb_id.upper()}.pdb"
+    with urllib.request.urlopen(url) as response:  # noqa: S310 (trusted host)
+        return response.read().decode("utf-8")
 
 
 def load(source: str) -> Scene:
     """Load a structure into a new :class:`Scene`.
 
-    ``source`` may be a 4-character PDB id (fetched from RCSB by the renderer),
-    or a path to a local ``.pdb`` / ``.cif`` file (embedded inline).
+    ``source`` may be a 4-character PDB id (downloaded from RCSB and parsed), or
+    a path to a local ``.pdb`` file (read and parsed). Coordinates are parsed in
+    Rust so the geometry can be generated natively.
     """
-    if _looks_like_pdb_id(source):
-        return Scene.from_rcsb(source.lower())
     if os.path.exists(source):
         with open(source, encoding="utf-8") as fh:
             return Scene.from_inline_pdb(fh.read())
-    # Fall back to treating it as an RCSB id (lets short non-standard ids work).
-    return Scene.from_rcsb(source.lower())
+    pdb_id = source.lower()
+    return Scene.from_rcsb(pdb_id, _fetch_rcsb_pdb(pdb_id))

@@ -1,4 +1,8 @@
-"""Facade tests: fluent chaining, serialization, and notebook display."""
+"""Facade tests: fluent chaining, geometry compilation, and notebook display.
+
+These use a local fixture (no network). The RCSB fetch path is covered
+separately under the ``network`` marker.
+"""
 
 import json
 import os
@@ -8,69 +12,80 @@ import pytest
 import molscene as ms
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "dipeptide.pdb")
+# dipeptide.pdb: 10 atoms (ALA 5 + GLY 4 + HOH 1), 1 water (HETATM).
 
 
 def build_scene():
-    return (
-        ms.load("1ubq")
-        .cartoon("protein", color="spectrum")
-        .surface("protein", opacity=0.25)
-        .sticks("ligand", color="element")
-    )
+    return ms.load(FIXTURE).spheres("protein", color="element").sticks("protein")
 
 
 def test_chaining_returns_same_object():
-    scene = ms.load("1ubq")
-    assert scene.cartoon("protein") is scene
-    assert scene.surface("protein") is scene
+    scene = ms.load(FIXTURE)
+    assert scene.spheres("all") is scene
+    assert scene.sticks("all") is scene
 
 
-def test_to_dict_matches_spec():
-    spec = build_scene().to_dict()
-    assert spec["spec_version"] == "0.1"
-    assert spec["structures"][0]["source"] == {"type": "rcsb", "id": "1ubq"}
-    kinds = [r["kind"] for r in spec["representations"]]
-    assert kinds == ["cartoon", "surface", "sticks"]
-    assert spec["representations"][0]["style"] == {"color": "spectrum"}
-    assert spec["representations"][1]["style"] == {"opacity": 0.25}
-    assert spec["camera"] == {"auto": True}
-
-
-def test_center_sets_camera():
-    spec = ms.load("1ubq").cartoon("protein").center("ligand").to_dict()
-    assert spec["camera"]["center"] == "ligand"
-
-
-def test_load_pdb_id_is_lowercased():
-    assert ms.load("1UBQ").to_dict()["structures"][0]["source"]["id"] == "1ubq"
-
-
-def test_load_local_file_inlines_pdb():
+def test_load_local_file_records_inline_source():
     spec = ms.load(FIXTURE).to_dict()
     source = spec["structures"][0]["source"]
     assert source["type"] == "inline_pdb"
     assert "ATOM" in source["data"]
 
 
+def test_spheres_geometry_one_per_selected_atom():
+    geom = ms.load(FIXTURE).spheres("protein", color="element").to_geometry()
+    # 9 protein atoms (ALA 5 + GLY 4); water excluded.
+    assert len(geom["spheres"]["centers"]) == 9
+    assert len(geom["spheres"]["radii"]) == 9
+    assert len(geom["spheres"]["colors"]) == 9
+
+
+def test_all_includes_water():
+    geom = ms.load(FIXTURE).spheres("all").to_geometry()
+    assert len(geom["spheres"]["centers"]) == 10
+
+
+def test_sticks_generate_cylinders():
+    geom = ms.load(FIXTURE).sticks("protein").to_geometry()
+    # Bonds within the dipeptide -> at least one cylinder (two halves per bond).
+    assert len(geom["cylinders"]["starts"]) > 0
+    assert len(geom["cylinders"]["starts"]) % 2 == 0
+
+
+def test_camera_is_bounding_sphere():
+    geom = ms.load(FIXTURE).spheres("all").to_geometry()
+    assert geom["camera"]["radius"] > 0
+    assert len(geom["camera"]["center"]) == 3
+
+
 def test_unknown_representation_kind_rejected():
-    scene = ms.load("1ubq")
+    scene = ms.load(FIXTURE)
     with pytest.raises(ValueError):
         scene._core.representation("ribbon", "all", "")
 
 
-def test_repr_html_contains_iframe_and_spec():
-    scene = build_scene()
-    html = scene._repr_html_()
+def test_repr_html_contains_iframe_and_geometry():
+    html = build_scene()._repr_html_()
     assert "<iframe" in html
     assert "srcdoc=" in html
-    # The spec JSON is embedded (HTML-escaped) in the srcdoc.
-    assert "spec_version" in html
-    assert "1ubq" in html
+    assert "molscene-geometry" in html
+    # No 3Dmol anywhere — Three.js is the sole renderer.
+    assert "3Dmol" not in html and "3dmol" not in html
 
 
-def test_export_html_writes_standalone_file(tmp_path):
+def test_export_html_is_self_contained(tmp_path):
     out = tmp_path / "scene.html"
     build_scene().export_html(str(out))
     text = out.read_text()
     assert text.startswith("<iframe")
-    assert "3Dmol" in text  # the pinned CDN script is referenced
+    # Fully offline: nothing is loaded from the network. (URL strings may appear
+    # inside the inlined Three.js bundle's license comments — that's fine; what
+    # matters is no external <script src>/<link href>.)
+    assert 'src="http' not in text and 'src=&quot;http' not in text
+    assert "<link" not in text
+
+
+@pytest.mark.network
+def test_load_rcsb_fetches_and_parses():
+    geom = ms.load("1ubq").spheres("protein").to_geometry()
+    assert len(geom["spheres"]["centers"]) > 100

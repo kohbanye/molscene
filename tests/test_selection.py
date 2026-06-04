@@ -1,6 +1,10 @@
 """Tests for the ``ms.sel`` DSL and its Rust-backed boolean operators."""
 
+import os
+
 import molscene as ms
+
+FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "dipeptide.pdb")
 
 
 def test_basic_macros():
@@ -42,6 +46,6 @@ def test_around_records_string():
 
 
 def test_selection_is_accepted_by_scene():
-    scene = ms.load("1ubq").sticks(ms.sel.chain("A") & ms.sel.ligand())
+    scene = ms.load(FIXTURE).sticks(ms.sel.chain("A") & ms.sel.ligand())
     sel_str = scene.to_dict()["representations"][0]["selection"]
     assert sel_str == "(chain A) and (ligand)"

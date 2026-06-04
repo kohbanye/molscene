@@ -1,6 +1,7 @@
-// Public entry point. esbuild bundles this into an IIFE exposed as
-// `window.molscene`, so the notebook iframe can call `molscene.render(...)`.
+// Public entry point. esbuild bundles this (with Three.js) into an IIFE exposed
+// as `window.molscene`, so the notebook iframe can call
+// `molscene.renderGeometry(element, spec)`.
 
-export { render } from "./threedmolAdapter";
-export { selectionToSpec, styleForKind, surfaceStyle } from "./translate";
-export type { SceneSpec } from "./spec";
+export { renderGeometry } from "./threejsRenderer";
+export { buildInstances, quaternionFromYTo } from "./geometry";
+export type { GeometrySpec } from "./geometry";

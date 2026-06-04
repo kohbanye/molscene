@@ -1,9 +1,11 @@
-"""Notebook display: turn a scene spec into self-contained HTML.
+"""Notebook display: render a geometry spec with the bundled Three.js viewer.
 
-We return an ``<iframe srcdoc="...">`` because that is the only approach that
-renders reliably across Jupyter Notebook 7, JupyterLab, Colab, and VS Code — it
-gets its own document context, avoiding script-injection sandboxing, requirejs
-collisions, and global-namespace clashes between multiple viewers.
+We return an ``<iframe srcdoc="...">`` — the only approach that renders reliably
+across Jupyter Notebook 7, JupyterLab, Colab, and VS Code (own document context,
+no script-injection sandboxing, no requirejs clashes, no global collisions).
+
+The viewer bundle (Three.js + the molscene adapter) is inlined, so the output is
+fully self-contained and works offline — no CDN.
 """
 
 from __future__ import annotations
@@ -11,11 +13,6 @@ from __future__ import annotations
 import html
 import json
 from importlib import resources
-
-# 3Dmol.js is loaded from a pinned CDN version (jsDelivr lags npm; never use
-# @latest). Bump deliberately.
-THREEDMOL_VERSION = "2.4.2"
-_CDN_URL = f"https://cdn.jsdelivr.net/npm/3dmol@{THREEDMOL_VERSION}/build/3Dmol-min.js"
 
 DEFAULT_HEIGHT = 480
 
@@ -31,42 +28,33 @@ def _load_viewer_js() -> str:
     except (FileNotFoundError, ModuleNotFoundError, AttributeError):
         return (
             "/* molscene viewer bundle not built; run `cd viewer && npm run build` */"
-            "\nwindow.molscene = window.molscene || { render: function(){ "
+            "\nwindow.molscene = window.molscene || { renderGeometry: function(){ "
             "console.warn('molscene viewer bundle missing'); } };"
         )
 
 
-def _srcdoc(spec: dict, *, use_cdn: bool = True) -> str:
-    """The HTML document loaded into the iframe."""
-    spec_json = json.dumps(spec)
+def _srcdoc(geometry: dict) -> str:
+    """The self-contained HTML document loaded into the iframe."""
+    geometry_json = json.dumps(geometry)
     viewer_js = _load_viewer_js()
-    threedmol_tag = (
-        f'<script src="{_CDN_URL}"></script>'
-        if use_cdn
-        # Offline export inlines nothing extra here; the bundle is expected to
-        # carry its own renderer when use_cdn is False (handled in v0.x export).
-        else f'<script src="{_CDN_URL}"></script>'
-    )
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
-        f"{threedmol_tag}"
-        "<style>html,body{margin:0;height:100%;}#viewport{position:relative;"
-        "width:100%;height:100vh;}</style></head><body>"
+        "<style>html,body{margin:0;height:100%;overflow:hidden;}"
+        "#viewport{position:relative;width:100%;height:100vh;}</style></head><body>"
         "<div id='viewport'></div>"
-        f"<script type='application/json' id='molscene-spec'>{spec_json}</script>"
+        f"<script type='application/json' id='molscene-geometry'>{geometry_json}</script>"
         f"<script>{viewer_js}</script>"
-        "<script>(function(){var spec=JSON.parse("
-        "document.getElementById('molscene-spec').textContent);"
-        "if(window.molscene&&window.molscene.render){"
-        "window.molscene.render(document.getElementById('viewport'),spec);}})();"
+        "<script>(function(){var g=JSON.parse("
+        "document.getElementById('molscene-geometry').textContent);"
+        "if(window.molscene&&window.molscene.renderGeometry){"
+        "window.molscene.renderGeometry(document.getElementById('viewport'),g);}})();"
         "</script></body></html>"
     )
 
 
-def render_html(spec: dict, *, height: int = DEFAULT_HEIGHT, width: str = "100%",
-                use_cdn: bool = True) -> str:
-    """Return an iframe (with escaped srcdoc) that renders the scene."""
-    srcdoc = _srcdoc(spec, use_cdn=use_cdn)
+def render_html(geometry: dict, *, height: int = DEFAULT_HEIGHT, width: str = "100%") -> str:
+    """Return an iframe (escaped srcdoc) that renders the geometry with Three.js."""
+    srcdoc = _srcdoc(geometry)
     escaped = html.escape(srcdoc, quote=True)
     style = f"border:0;width:{width};height:{height}px;"
     return (

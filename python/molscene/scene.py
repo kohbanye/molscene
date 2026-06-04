@@ -20,12 +20,12 @@ class Scene:
 
     # -- constructors -------------------------------------------------------
     @classmethod
-    def from_rcsb(cls, pdb_id: str) -> "Scene":
-        return cls(_core.Scene.from_rcsb(pdb_id))
+    def from_rcsb(cls, pdb_id: str, pdb_text: str) -> "Scene":
+        return cls(_core.Scene.from_rcsb(pdb_id, pdb_text))
 
     @classmethod
-    def from_inline_pdb(cls, data: str) -> "Scene":
-        return cls(_core.Scene.from_inline_pdb(data))
+    def from_inline_pdb(cls, pdb_text: str) -> "Scene":
+        return cls(_core.Scene.from_inline_pdb(pdb_text))
 
     # -- representations ----------------------------------------------------
     def _add(self, kind: str, selection: Any, color, opacity, style: dict) -> "Scene":
@@ -59,23 +59,28 @@ class Scene:
 
     # -- serialization ------------------------------------------------------
     def to_json(self) -> str:
+        """The declarative scene spec (for inspection/reproducibility)."""
         return self._core.to_json()
 
     def to_dict(self) -> dict:
         return json.loads(self._core.to_json())
 
+    def to_geometry(self) -> dict:
+        """The compiled geometry spec (instanced draw list) the renderer draws."""
+        return json.loads(self._core.to_geometry_json())
+
     # -- display ------------------------------------------------------------
     def _repr_html_(self) -> str:
-        return render_html(self.to_dict())
+        return render_html(self.to_geometry())
 
     def show(self, *, height: int = DEFAULT_HEIGHT, width: str = "100%"):
         from IPython.display import HTML
 
-        return HTML(render_html(self.to_dict(), height=height, width=width))
+        return HTML(render_html(self.to_geometry(), height=height, width=width))
 
     def export_html(self, path: str, *, height: int = DEFAULT_HEIGHT,
                     width: str = "100%") -> str:
-        markup = render_html(self.to_dict(), height=height, width=width, use_cdn=True)
+        markup = render_html(self.to_geometry(), height=height, width=width)
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(markup)
         return path

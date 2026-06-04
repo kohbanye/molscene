@@ -7,7 +7,7 @@
 //! the `ms.sel` DSL backed by the core.
 
 use molscene_core::scene::Scene as CoreScene;
-use molscene_core::spec::{RepresentationKind, Style};
+use molscene_core::spec::{RepresentationKind, Source, Style};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -45,20 +45,26 @@ pub struct Scene {
 
 #[pymethods]
 impl Scene {
-    /// Build a scene that fetches `id` from RCSB.
+    /// Build a scene from PDB text fetched for an RCSB `id`. Parses the
+    /// coordinates and records the id as the spec source.
     #[staticmethod]
-    fn from_rcsb(id: &str) -> Self {
-        Scene {
-            inner: CoreScene::from_rcsb(id),
-        }
+    fn from_rcsb(id: &str, pdb_text: &str) -> PyResult<Self> {
+        let inner = CoreScene::from_pdb(pdb_text, Source::Rcsb { id: id.to_string() })
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Scene { inner })
     }
 
-    /// Build a scene from inline PDB text.
+    /// Build a scene from inline PDB text (parsed and embedded in the spec).
     #[staticmethod]
-    fn from_inline_pdb(data: &str) -> Self {
-        Scene {
-            inner: CoreScene::from_inline_pdb(data),
-        }
+    fn from_inline_pdb(pdb_text: &str) -> PyResult<Self> {
+        let inner = CoreScene::from_pdb(
+            pdb_text,
+            Source::InlinePdb {
+                data: pdb_text.to_string(),
+            },
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Scene { inner })
     }
 
     /// Add a representation. `style_json` is a JSON object string (or "").
@@ -79,9 +85,14 @@ impl Scene {
         self.inner.center(selection);
     }
 
-    /// Serialize to the JSON scene spec.
+    /// Serialize to the JSON scene spec (declarative form).
     fn to_json(&self) -> String {
         self.inner.to_json()
+    }
+
+    /// Compile to the JSON geometry spec (instanced draw list for the renderer).
+    fn to_geometry_json(&self) -> String {
+        self.inner.to_geometry_json()
     }
 }
 
