@@ -1,0 +1,45 @@
+---
+source: crates/molscene-core/src/scene.rs
+expression: scene.to_value()
+---
+{
+  "camera": {
+    "auto": true
+  },
+  "representations": [
+    {
+      "kind": "cartoon",
+      "selection": "protein",
+      "structure": "s0",
+      "style": {
+        "color": "spectrum"
+      }
+    },
+    {
+      "kind": "surface",
+      "selection": "protein",
+      "structure": "s0",
+      "style": {
+        "opacity": 0.25
+      }
+    },
+    {
+      "kind": "sticks",
+      "selection": "ligand",
+      "structure": "s0",
+      "style": {
+        "color": "element"
+      }
+    }
+  ],
+  "spec_version": "0.1",
+  "structures": [
+    {
+      "id": "s0",
+      "source": {
+        "id": "1ubq",
+        "type": "rcsb"
+      }
+    }
+  ]
+}
