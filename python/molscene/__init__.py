@@ -1,4 +1,4 @@
-"""molscene — Python-first, notebook-native molecular scene builder.
+"""molscene — notebook-native molecular visualization with a Rust core.
 
     import molscene as ms
 

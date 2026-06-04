@@ -1,24 +1,24 @@
 # molscene
 
-Python-first, notebook-native molecular scene builder. A Pythonic reimagining of
-PyMOL's convenience — designed to be easy for AI to generate and for humans to
-tweak, with no native app required.
+A molecular visualization library for notebooks. The heavy lifting — parsing,
+selection, neighbor search, and 3D geometry generation — runs in a Rust core;
+the browser is used only to draw. The API is plain Python, so scenes are easy
+for people and AI to write and tweak. No native app required.
 
 ```python
 import molscene as ms
 
 scene = (
     ms.load("1ubq")
-    .cartoon("protein", color="spectrum")
-    .surface("protein", opacity=0.25)
-    .sticks("ligand", color="element")
+    .sticks("protein", color="spectrum")
+    .spheres("hetero", color="element")
 )
 scene.show()   # interactive 3D in Jupyter / Colab / VS Code
 ```
 
 ## Architecture
 
-```
+```text
 Python fluent API ─┐
                    ├─ molscene-py (PyO3)      ─┐
 browser / JS API  ─┤                          ├─ molscene-core (pure Rust)
