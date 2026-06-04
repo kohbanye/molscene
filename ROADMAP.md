@@ -62,7 +62,24 @@ Make selection a first-class, fully-evaluated language in Rust.
 **Deliverable:** `ms.sel.chain("A") & ms.sel.around(ms.sel.ligand(), 5) & ~ms.sel.water()`
 evaluates to the right atoms and renders.
 
-## v0.3 — Cartoon (the hero representation)
+## v0.3 — Coloring
+
+Per-instance color already exists in `GeometrySpec`; this exposes richer ways to
+drive it.
+
+- **Color by property**: B-factor, occupancy, or a user-supplied per-atom array,
+  mapped through a colormap (viridis, etc.). Requires storing B-factor/occupancy
+  on `Atom` (currently dropped during parsing).
+- **Explicit / per-selection color**: override a sub-selection's color within a
+  representation (e.g. grey everything, one residue red) without stacking reps;
+  a `set_color(selection, color)`-style API.
+- **Color-by-element keeping carbon**: the common "color by element but carbons
+  in color X" idiom.
+
+**Deliverable:** `ms.load("1ubq").cartoon("protein", color="bfactor")` and
+explicit per-selection colors.
+
+## v0.4 — Cartoon (the hero representation)
 
 The iconic protein view, generated natively.
 
@@ -77,16 +94,31 @@ The iconic protein view, generated natively.
 **Deliverable:** `ms.load("1ubq").cartoon("protein", color="spectrum")` renders a
 real cartoon.
 
-## v0.4 — Surface
+## v0.5 — Surface
 
 - Molecular **surface mesh** (SES / Gaussian) via a density grid +
   marching cubes / surface-nets (Rust crate, e.g. `fast-surface-nets`).
 - **Transparency** in the renderer (depth-sorted / OIT-lite) for `opacity`.
-- Reuse the `meshes` channel from v0.3.
+- Reuse the `meshes` channel from v0.4.
 
 **Deliverable:** `surface("protein", opacity=0.3)` over a cartoon.
 
-## v0.5 — Rendering quality & performance
+## v0.6 — Chemistry & bond orders
+
+Correct chemistry for ligands and small molecules. (Proteins stay single-bond
+sticks, as is conventional.)
+
+- **Bond orders**: read from mmCIF / the Chemical Component Dictionary and from
+  SDF / mol2 imports; geometry-based perception (ring SSSR + heuristics) as a
+  fallback. Carry order (and aromaticity) on `Structure`'s bonds.
+- **Double / triple bonds**: parallel offset cylinders, oriented by a bond
+  reference plane (neighbor atoms / ring plane).
+- **Aromatic rings**: inner-ring depiction (or alternating doubles).
+- Ligand-focused: pairs with better default handling of `organic` / `ligand`.
+
+**Deliverable:** a ligand rendered with correct double bonds and aromatic rings.
+
+## v0.7 — Rendering quality & performance
 
 - **Lighting/material polish**: hemisphere + fill lights, sensible defaults,
   truer CPK colors; configurable background; antialiasing.
@@ -98,7 +130,7 @@ real cartoon.
 - Cheap reps: `lines`, `dots`, `labels`.
 - Water/solvent sensible defaults (don't dump crystal waters by accident).
 
-## v0.6 — WASM / pure-web
+## v0.8 — WASM / pure-web
 
 Prove the dual-core thesis.
 
