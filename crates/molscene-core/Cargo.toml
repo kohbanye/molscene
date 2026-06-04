@@ -10,8 +10,6 @@ description = "Core engine for molscene: structure model, scene graph, selection
 serde = { workspace = true }
 serde_json = { workspace = true }
 pdbtbx = { version = "0.12", optional = true }
-# k-d tree for spatial selection (around/within/expand/beyond). Pure Rust,
-# WASM-safe; only the in-memory tree is used (no serde/rkyv features).
 kiddo = { version = "5", default-features = false }
 
 [features]
