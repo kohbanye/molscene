@@ -1,9 +1,8 @@
 # molscene
 
-A molecular visualization library for notebooks. The heavy lifting — parsing,
-selection, neighbor search, and 3D geometry generation — runs in a Rust core;
-the browser is used only to draw. The API is plain Python, so scenes are easy
-for people and AI to write and tweak. No native app required.
+molscene is a Rust-based molecular visualization library for AI-driven research. Scenes are written
+declaratively, a short block of code an AI can generate. No native app
+required.
 
 ```python
 import molscene as ms
@@ -13,7 +12,7 @@ scene = (
     .sticks("protein", color="spectrum")
     .spheres("hetero", color="element")
 )
-scene.show()   # interactive 3D in Jupyter / Colab / VS Code
+scene.show()   # interactive 3D in Jupyter / Colab
 ```
 
 ## Architecture
