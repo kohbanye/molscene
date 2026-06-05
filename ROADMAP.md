@@ -87,7 +87,7 @@ is `<base>[:<modifier>]` and `ColorScheme::parse` remains the single source of t
 - **Color-by-element keeping carbon**: `color="element:cyan"` — CPK with carbons in
   the chosen color.
 
-**Deliverable:** `ms.load("1ubq").cartoon("protein", color="bfactor")` and explicit
+**Deliverable:** `ms.load("1ubq").spheres("protein", color="bfactor")` and explicit
 per-selection colors (`.set_color("resi 50", "red")`) evaluate and render.
 
 ## v0.4 — Cartoon (the hero representation)

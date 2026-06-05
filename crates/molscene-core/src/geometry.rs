@@ -226,7 +226,8 @@ impl Scene {
             // resolved over the atoms it colors.
             let base = resolve_scheme(scheme_of(&rep.style), structure, &indices);
             // An explicit `set_color` override wins over the base scheme.
-            let color_at = |i: usize, a: &Atom| match overrides[i] {
+            // `overrides` is empty when no `set_color` was used.
+            let color_at = |i: usize, a: &Atom| match overrides.get(i).copied().flatten() {
                 Some(ov) => ctx.color(ov, a),
                 None => ctx.color(base, a),
             };
@@ -293,6 +294,9 @@ impl Scene {
     /// `set_color` assignments, applied in order (last write wins). `None` means
     /// the atom keeps whatever scheme its representation uses.
     fn color_overrides(&self, structure: &Structure) -> Vec<Option<ColorScheme>> {
+        if self.color_assignments().is_empty() {
+            return Vec::new();
+        }
         let mut map = vec![None; structure.atoms.len()];
         for assignment in self.color_assignments() {
             let scheme = ColorScheme::parse(&assignment.color);

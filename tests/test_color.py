@@ -25,6 +25,7 @@ def test_occupancy_colormap_keyword_is_accepted():
     # All occupancies are 1.0 -> degenerate range -> a single flat color.
     geom = ms.load(BFACTORS).spheres("all", color="occupancy:plasma").to_geometry()
     colors = geom["spheres"]["colors"]
+    assert len(colors) == 4  # all atoms produced, not a partial/empty geometry
     assert len({tuple(c) for c in colors}) == 1
 
 

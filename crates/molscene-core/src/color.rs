@@ -84,8 +84,9 @@ impl ColorScheme {
                 range: None,
             },
             _ => {
-                // No recognized base keyword; treat the whole value as a color.
-                if let Some(rgb) = named_color(&v).or_else(|| parse_hex(&v)) {
+                // No recognized base keyword; treat `base` as a fixed color. A
+                // fixed color takes no modifier, so `red:plasma` is just `red`.
+                if let Some(rgb) = named_color(base).or_else(|| parse_hex(base)) {
                     ColorScheme::Fixed(rgb)
                 } else {
                     eprintln!("molscene: unknown color {value:?}; defaulting to element coloring.");
@@ -329,6 +330,15 @@ mod tests {
         );
         // unknown -> element fallback
         assert_eq!(ColorScheme::parse("not-a-color"), ColorScheme::Element);
+        // a fixed color takes no modifier; an accidental one is ignored.
+        assert_eq!(
+            ColorScheme::parse("red:plasma"),
+            ColorScheme::Fixed([1.0, 0.0, 0.0])
+        );
+        assert_eq!(
+            ColorScheme::parse("#ff0000:nope"),
+            ColorScheme::Fixed([1.0, 0.0, 0.0])
+        );
     }
 
     #[test]
