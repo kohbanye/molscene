@@ -39,6 +39,9 @@ These constrain every milestone below:
   `and`/`or`/`not`, spatial `around`/`within`/`expand`/`beyond` (kiddo k-d tree),
   aggregation `byres`/`bychain`/`bymol`, numeric `b`/`q`, parsed from a string and
   validated (invalid selections raise `ValueError`).
+- **Coloring** (v0.3): property colormaps (`bfactor`/`occupancy` → viridis/plasma/
+  rdylgn, auto-ranged), color-by-element-keeping-carbon (`element:cyan`), and
+  explicit per-selection overrides via `scene.set_color(selection, color)`.
 
 ### Current limitations (these drive the milestones below)
 
@@ -68,22 +71,24 @@ Selection is a first-class, fully-evaluated language in Rust.
 **Deliverable:** `ms.select.chain("A") & ms.select.around(ms.select.ligand(), 5) & ~ms.select.water()`
 evaluates to the right atoms and renders.
 
-## v0.3 — Coloring
+## v0.3 — Coloring ✅ (shipped)
 
-Per-instance color already exists in `GeometrySpec`; this exposes richer ways to
-drive it.
+Per-instance color already existed in `GeometrySpec`; v0.3 exposes richer ways to
+drive it. The `color` string stays the canonical, hand-editable form; the grammar
+is `<base>[:<modifier>]` and `ColorScheme::parse` remains the single source of truth.
 
-- **Color by property**: B-factor, occupancy, or a user-supplied per-atom array,
-  mapped through a colormap (viridis, etc.). B-factor/occupancy are already stored
-  on `Atom` (added in v0.2); this wires them into color resolution.
-- **Explicit / per-selection color**: override a sub-selection's color within a
-  representation (e.g. grey everything, one residue red) without stacking reps;
-  a `set_color(selection, color)`-style API.
-- **Color-by-element keeping carbon**: the common "color by element but carbons
-  in color X" idiom.
+- **Color by property**: `color="bfactor"` / `"occupancy"` (aliases `b`/`q`) maps
+  the per-atom field — already stored on `Atom` since v0.2 — through a colormap,
+  auto-ranged over the colored atoms. Colormaps: `viridis` (default), `plasma`,
+  `rdylgn`, picked via the modifier (`bfactor:plasma`).
+- **Explicit / per-selection color**: `scene.set_color(selection, color)` overrides
+  a sub-selection on top of the representations' schemes (PyMOL-style, last write
+  wins) without stacking reps. Stored as a `colors` list on the scene spec.
+- **Color-by-element keeping carbon**: `color="element:cyan"` — CPK with carbons in
+  the chosen color.
 
-**Deliverable:** `ms.load("1ubq").cartoon("protein", color="bfactor")` and
-explicit per-selection colors.
+**Deliverable:** `ms.load("1ubq").cartoon("protein", color="bfactor")` and explicit
+per-selection colors (`.set_color("resi 50", "red")`) evaluate and render.
 
 ## v0.4 — Cartoon (the hero representation)
 
