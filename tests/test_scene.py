@@ -14,24 +14,21 @@ FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "dipeptide.pdb")
 
 
 def build_scene():
-    return ms.load(FIXTURE).spheres("protein", color="element").sticks("protein")
+    return (
+        ms.load(FIXTURE)
+        .spheres(ms.select.protein(), color="element")
+        .sticks(ms.select.protein())
+    )
 
 
 def test_chaining_returns_same_object():
     scene = ms.load(FIXTURE)
-    assert scene.spheres("all") is scene
-    assert scene.sticks("all") is scene
-
-
-def test_load_local_file_records_inline_source():
-    spec = ms.load(FIXTURE).to_dict()
-    source = spec["structures"][0]["source"]
-    assert source["type"] == "inline_pdb"
-    assert "ATOM" in source["data"]
+    assert scene.spheres(ms.select.all()) is scene
+    assert scene.sticks(ms.select.all()) is scene
 
 
 def test_spheres_geometry_one_per_selected_atom():
-    geom = ms.load(FIXTURE).spheres("protein", color="element").to_geometry()
+    geom = ms.load(FIXTURE).spheres(ms.select.protein(), color="element").to_geometry()
     # 9 protein atoms (ALA 5 + GLY 4); water excluded.
     assert len(geom["spheres"]["centers"]) == 9
     assert len(geom["spheres"]["radii"]) == 9
@@ -39,19 +36,24 @@ def test_spheres_geometry_one_per_selected_atom():
 
 
 def test_all_includes_water():
-    geom = ms.load(FIXTURE).spheres("all").to_geometry()
+    geom = ms.load(FIXTURE).spheres(ms.select.all()).to_geometry()
     assert len(geom["spheres"]["centers"]) == 10
 
 
+def test_default_selections_apply():
+    # spheres defaults to all (10), sticks to ligand (none in this fixture).
+    assert len(ms.load(FIXTURE).spheres().to_geometry()["spheres"]["centers"]) == 10
+
+
 def test_sticks_generate_cylinders():
-    geom = ms.load(FIXTURE).sticks("protein").to_geometry()
+    geom = ms.load(FIXTURE).sticks(ms.select.protein()).to_geometry()
     # Bonds within the dipeptide -> at least one cylinder (two halves per bond).
     assert len(geom["cylinders"]["starts"]) > 0
     assert len(geom["cylinders"]["starts"]) % 2 == 0
 
 
 def test_camera_is_bounding_sphere():
-    geom = ms.load(FIXTURE).spheres("all").to_geometry()
+    geom = ms.load(FIXTURE).spheres(ms.select.all()).to_geometry()
     assert geom["camera"]["radius"] > 0
     assert len(geom["camera"]["center"]) == 3
 
@@ -59,7 +61,11 @@ def test_camera_is_bounding_sphere():
 def test_unknown_representation_kind_rejected():
     scene = ms.load(FIXTURE)
     with pytest.raises(ValueError):
-        scene._core.representation("ribbon", "all", "")
+        scene._core.representation("ribbon", ms.select.all())
+
+
+def test_repr_counts_representations():
+    assert repr(build_scene()) == "<molscene.Scene: 2 representation(s)>"
 
 
 def test_repr_html_contains_iframe_and_geometry():
@@ -85,5 +91,5 @@ def test_export_html_is_self_contained(tmp_path):
 
 @pytest.mark.network
 def test_load_rcsb_fetches_and_parses():
-    geom = ms.load("1ubq").spheres("protein").to_geometry()
+    geom = ms.load("1ubq").spheres(ms.select.protein()).to_geometry()
     assert len(geom["spheres"]["centers"]) > 100

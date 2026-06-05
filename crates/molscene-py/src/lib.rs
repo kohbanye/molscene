@@ -1,23 +1,17 @@
 //! PyO3 bindings: thin wrappers over molscene-core, exposed as the
 //! `molscene._core` extension module.
 //!
-//! State and serialization live in Rust (`core::Scene`); the Python facade in
-//! `python/molscene/` adds the ergonomic keyword-argument API and notebook
-//! display on top. `Selection` implements the boolean operators in Rust to keep
-//! the `ms.select` DSL backed by the core.
+//! State lives in Rust (`core::Scene`); the Python facade in `python/molscene/`
+//! adds the ergonomic keyword-argument API and notebook display on top.
+//! `Selection` wraps a core [`Expr`] and is built through constructor
+//! staticmethods (the `ms.select` DSL) and the boolean operators (`& | ~`) — there
+//! is no selection string to parse, so an invalid selection cannot be expressed.
 
 use molscene_core::scene::Scene as CoreScene;
 use molscene_core::spec::{RepresentationKind, Source, Style};
+use molscene_core::{CmpOp, Expr, NumField};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-
-/// Validate a selection string against the core grammar, mapping a parse error
-/// to a Python `ValueError`.
-fn validate_selection(selection: &str) -> PyResult<()> {
-    molscene_core::selection::parse(selection)
-        .map(|_| ())
-        .map_err(|e| PyValueError::new_err(format!("invalid selection {selection:?}: {e}")))
-}
 
 fn parse_kind(kind: &str) -> PyResult<RepresentationKind> {
     Ok(match kind {
@@ -33,18 +27,6 @@ fn parse_kind(kind: &str) -> PyResult<RepresentationKind> {
     })
 }
 
-fn parse_style(style_json: &str) -> PyResult<Style> {
-    if style_json.is_empty() {
-        return Ok(Style::new());
-    }
-    let value: serde_json::Value = serde_json::from_str(style_json)
-        .map_err(|e| PyValueError::new_err(format!("invalid style JSON: {e}")))?;
-    match value {
-        serde_json::Value::Object(map) => Ok(map),
-        _ => Err(PyValueError::new_err("style must be a JSON object")),
-    }
-}
-
 /// A molecular scene. Wraps `molscene_core::Scene`.
 #[pyclass(module = "molscene._core")]
 pub struct Scene {
@@ -53,8 +35,7 @@ pub struct Scene {
 
 #[pymethods]
 impl Scene {
-    /// Build a scene from PDB text fetched for an RCSB `id`. Parses the
-    /// coordinates and records the id as the spec source.
+    /// Build a scene from PDB text fetched for an RCSB `id`.
     #[staticmethod]
     fn from_rcsb(id: &str, pdb_text: &str) -> PyResult<Self> {
         let inner = CoreScene::from_pdb(pdb_text, Source::Rcsb { id: id.to_string() })
@@ -62,7 +43,7 @@ impl Scene {
         Ok(Scene { inner })
     }
 
-    /// Build a scene from inline PDB text (parsed and embedded in the spec).
+    /// Build a scene from inline PDB text.
     #[staticmethod]
     fn from_inline_pdb(pdb_text: &str) -> PyResult<Self> {
         let inner = CoreScene::from_pdb(
@@ -75,38 +56,43 @@ impl Scene {
         Ok(Scene { inner })
     }
 
-    /// Add a representation. `style_json` is a JSON object string (or "").
-    fn representation(&mut self, kind: &str, selection: &str, style_json: &str) -> PyResult<()> {
+    /// Add a representation over `selection` with optional typed style.
+    #[pyo3(signature = (kind, selection, color=None, opacity=None, scale=None, radius=None))]
+    fn representation(
+        &mut self,
+        kind: &str,
+        selection: &Selection,
+        color: Option<String>,
+        opacity: Option<f64>,
+        scale: Option<f64>,
+        radius: Option<f64>,
+    ) -> PyResult<()> {
         let kind = parse_kind(kind)?;
-        validate_selection(selection)?;
-        let style = parse_style(style_json)?;
+        let style = Style {
+            color,
+            opacity: opacity.map(|v| v as f32),
+            scale: scale.map(|v| v as f32),
+            radius: radius.map(|v| v as f32),
+        };
+        let sel = selection.expr.clone();
         match kind {
-            RepresentationKind::Cartoon => self.inner.cartoon(selection, style),
-            RepresentationKind::Surface => self.inner.surface(selection, style),
-            RepresentationKind::Sticks => self.inner.sticks(selection, style),
-            RepresentationKind::Spheres => self.inner.spheres(selection, style),
+            RepresentationKind::Cartoon => self.inner.cartoon(sel, style),
+            RepresentationKind::Surface => self.inner.surface(sel, style),
+            RepresentationKind::Sticks => self.inner.sticks(sel, style),
+            RepresentationKind::Spheres => self.inner.spheres(sel, style),
         };
         Ok(())
     }
 
     /// Center the camera on a selection.
-    fn set_center(&mut self, selection: &str) -> PyResult<()> {
-        validate_selection(selection)?;
-        self.inner.center(selection);
-        Ok(())
+    fn set_center(&mut self, selection: &Selection) {
+        self.inner.center(selection.expr.clone());
     }
 
     /// Override the color of a sub-selection (applied on top of the
     /// representations' schemes, in call order).
-    fn set_color(&mut self, selection: &str, color: &str) -> PyResult<()> {
-        validate_selection(selection)?;
-        self.inner.set_color(selection, color);
-        Ok(())
-    }
-
-    /// Serialize to the JSON scene spec (declarative form).
-    fn to_json(&self) -> String {
-        self.inner.to_json()
+    fn set_color(&mut self, selection: &Selection, color: &str) {
+        self.inner.set_color(selection.expr.clone(), color);
     }
 
     /// Compile to the JSON geometry spec (instanced draw list for the renderer).
@@ -115,58 +101,160 @@ impl Scene {
     }
 }
 
-/// A selection. Wraps a selection string; the boolean operators (`& | ~`)
-/// compose it. The core parses and evaluates the string into an expression tree
-/// (boolean / spatial / aggregation / numeric); invalid strings raise
-/// `ValueError` when added to a scene.
+/// A selection — a wrapper over a core [`Expr`]. Built through the constructor
+/// staticmethods (the `ms.select` DSL) and composed with the boolean operators
+/// (`& | ~`). Valid by construction; there is no selection string.
 #[pyclass(module = "molscene._core", skip_from_py_object)]
 #[derive(Clone)]
 pub struct Selection {
-    value: String,
+    expr: Expr,
+}
+
+impl Selection {
+    fn of(expr: Expr) -> Selection {
+        Selection { expr }
+    }
 }
 
 #[pymethods]
 impl Selection {
-    #[new]
-    fn new(value: String) -> Self {
-        Selection { value }
+    // -- classification macros ----------------------------------------------
+    #[staticmethod]
+    fn all() -> Selection {
+        Selection::of(Expr::All)
+    }
+    #[staticmethod]
+    fn none() -> Selection {
+        Selection::of(Expr::None)
+    }
+    #[staticmethod]
+    fn protein() -> Selection {
+        Selection::of(Expr::Protein)
+    }
+    #[staticmethod]
+    fn nucleic() -> Selection {
+        // The evaluator treats protein/polymer/nucleic alike (non-hetero) today.
+        Selection::of(Expr::Protein)
+    }
+    #[staticmethod]
+    fn ligand() -> Selection {
+        Selection::of(Expr::Ligand)
+    }
+    #[staticmethod]
+    fn water() -> Selection {
+        Selection::of(Expr::Water)
+    }
+    #[staticmethod]
+    fn hetero() -> Selection {
+        Selection::of(Expr::Hetero)
+    }
+    #[staticmethod]
+    fn backbone() -> Selection {
+        Selection::of(Expr::Backbone)
+    }
+    #[staticmethod]
+    fn sidechain() -> Selection {
+        Selection::of(Expr::Sidechain)
+    }
+    #[staticmethod]
+    fn hydrogen() -> Selection {
+        Selection::of(Expr::Hydrogen)
     }
 
-    #[getter]
-    fn value(&self) -> &str {
-        &self.value
+    // -- single-clause predicates -------------------------------------------
+    #[staticmethod]
+    fn chain(id: &str) -> Selection {
+        Selection::of(Expr::chain(id))
+    }
+    #[staticmethod]
+    fn resn(name: &str) -> Selection {
+        Selection::of(Expr::resn(name))
+    }
+    #[staticmethod]
+    fn element(symbol: &str) -> Selection {
+        Selection::of(Expr::element(symbol))
+    }
+    #[staticmethod]
+    #[pyo3(signature = (start, end=None))]
+    fn resi(start: i32, end: Option<i32>) -> Selection {
+        Selection::of(Expr::resi(start, end.unwrap_or(start)))
+    }
+    #[staticmethod]
+    fn b(op: &str, value: f64) -> PyResult<Selection> {
+        Ok(Selection::of(Expr::numeric(
+            NumField::BFactor,
+            cmp(op)?,
+            value,
+        )))
+    }
+    #[staticmethod]
+    fn q(op: &str, value: f64) -> PyResult<Selection> {
+        Ok(Selection::of(Expr::numeric(
+            NumField::Occupancy,
+            cmp(op)?,
+            value,
+        )))
     }
 
+    // -- aggregation --------------------------------------------------------
+    #[staticmethod]
+    fn byres(sel: &Selection) -> Selection {
+        Selection::of(sel.expr.clone().byres())
+    }
+    #[staticmethod]
+    fn bychain(sel: &Selection) -> Selection {
+        Selection::of(sel.expr.clone().bychain())
+    }
+    #[staticmethod]
+    fn bymol(sel: &Selection) -> Selection {
+        Selection::of(sel.expr.clone().bymol())
+    }
+
+    // -- spatial (radius in Å of an operand selection) ----------------------
+    #[staticmethod]
+    fn around(sel: &Selection, radius: f64) -> Selection {
+        Selection::of(sel.expr.clone().around(radius))
+    }
+    #[staticmethod]
+    fn within(sel: &Selection, radius: f64) -> Selection {
+        Selection::of(sel.expr.clone().within(radius))
+    }
+    #[staticmethod]
+    fn expand(sel: &Selection, radius: f64) -> Selection {
+        Selection::of(sel.expr.clone().expand(radius))
+    }
+    #[staticmethod]
+    fn beyond(sel: &Selection, radius: f64) -> Selection {
+        Selection::of(sel.expr.clone().beyond(radius))
+    }
+
+    // -- boolean composition ------------------------------------------------
     fn __and__(&self, other: &Selection) -> Selection {
-        Selection {
-            value: format!("({}) and ({})", self.value, other.value),
-        }
+        Selection::of(self.expr.clone().and(other.expr.clone()))
     }
-
     fn __or__(&self, other: &Selection) -> Selection {
-        Selection {
-            value: format!("({}) or ({})", self.value, other.value),
-        }
+        Selection::of(self.expr.clone().or(other.expr.clone()))
     }
-
     fn __invert__(&self) -> Selection {
-        Selection {
-            value: format!("not ({})", self.value),
-        }
+        Selection::of(self.expr.clone().not())
     }
 
-    fn __str__(&self) -> &str {
-        &self.value
+    fn __str__(&self) -> String {
+        self.expr.to_string()
     }
-
     fn __repr__(&self) -> String {
-        format!("Selection({:?})", self.value)
+        format!("Selection({:?})", self.expr.to_string())
     }
+}
+
+/// Map a comparison operator string to a `CmpOp`, or raise `ValueError`.
+fn cmp(op: &str) -> PyResult<CmpOp> {
+    CmpOp::parse(op)
+        .ok_or_else(|| PyValueError::new_err(format!("invalid comparison operator {op:?}")))
 }
 
 #[pymodule]
 fn _core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("SPEC_VERSION", molscene_core::spec::SPEC_VERSION)?;
     m.add_class::<Scene>()?;
     m.add_class::<Selection>()?;
     Ok(())
