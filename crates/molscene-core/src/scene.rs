@@ -5,7 +5,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::spec::{
-    default_spec_version, Camera, Representation, RepresentationKind, Source, StructureEntry, Style,
+    default_spec_version, Camera, ColorAssignment, Representation, RepresentationKind, Source,
+    StructureEntry, Style,
 };
 use crate::structure::Structure;
 
@@ -23,6 +24,8 @@ pub struct Scene {
     spec_version: String,
     structures: Vec<StructureEntry>,
     representations: Vec<Representation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    colors: Vec<ColorAssignment>,
     camera: Camera,
     /// Parsed coordinates, kept in memory for native geometry generation. Not
     /// part of the serialized scene spec.
@@ -40,6 +43,7 @@ impl Scene {
                 source,
             }],
             representations: Vec::new(),
+            colors: Vec::new(),
             camera: Camera::default(),
             structure: None,
         }
@@ -108,9 +112,24 @@ impl Scene {
         self
     }
 
+    /// Override the color of a sub-selection, on top of the representations'
+    /// schemes. Applied in call order (last write wins) at geometry time.
+    pub fn set_color(&mut self, selection: &str, color: &str) -> &mut Self {
+        self.colors.push(ColorAssignment {
+            selection: selection.to_string(),
+            color: color.to_string(),
+        });
+        self
+    }
+
     /// Representations added so far.
     pub fn representations(&self) -> &[Representation] {
         &self.representations
+    }
+
+    /// Explicit color overrides added so far (in application order).
+    pub fn color_assignments(&self) -> &[ColorAssignment] {
+        &self.colors
     }
 
     /// The camera.
@@ -183,12 +202,26 @@ mod tests {
     }
 
     #[test]
+    fn set_color_records_overrides_in_order() {
+        let mut scene = Scene::from_rcsb("1ubq");
+        scene
+            .set_color("protein", "grey")
+            .set_color("resi 50", "red");
+        let overrides = scene.color_assignments();
+        assert_eq!(overrides.len(), 2);
+        assert_eq!(overrides[0].selection, "protein");
+        assert_eq!(overrides[0].color, "grey");
+        assert_eq!(overrides[1].color, "red");
+    }
+
+    #[test]
     fn matches_spec_snapshot() {
         let mut scene = Scene::from_rcsb("1ubq");
         scene
             .cartoon("protein", style(json!({"color": "spectrum"})))
             .surface("protein", style(json!({"opacity": 0.25})))
-            .sticks("ligand", style(json!({"color": "element"})));
+            .sticks("ligand", style(json!({"color": "element"})))
+            .set_color("resi 50", "red");
 
         insta::assert_json_snapshot!(scene.to_value());
     }

@@ -10,7 +10,9 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::color::{chain_color, element_color, spectrum_color, ColorScheme, Rgb};
+use crate::color::{
+    chain_color, colormap_color, element_color, spectrum_color, ColorScheme, PropertyField, Rgb,
+};
 use crate::scene::Scene;
 use crate::selection::evaluate;
 use crate::spec::RepresentationKind;
@@ -105,6 +107,13 @@ impl ColorCtx {
     fn color(&self, scheme: ColorScheme, atom: &Atom) -> Rgb {
         match scheme {
             ColorScheme::Element => element_color(&atom.element),
+            ColorScheme::ElementCarbon(carbon) => {
+                if atom.element.trim().eq_ignore_ascii_case("C") {
+                    carbon
+                } else {
+                    element_color(&atom.element)
+                }
+            }
             ColorScheme::Chain => chain_color(*self.chain_index.get(&atom.chain_id).unwrap_or(&0)),
             ColorScheme::Spectrum => {
                 let key = (
@@ -120,8 +129,53 @@ impl ColorCtx {
                 };
                 spectrum_color(t)
             }
+            ColorScheme::ByProperty { field, map, range } => {
+                // An unresolved (auto) range means we never saw the atom set;
+                // fall back to a flat t=0 rather than panicking.
+                let (lo, hi) = range.unwrap_or((0.0, 0.0));
+                let v = property_value(field, atom);
+                let t = if hi > lo { (v - lo) / (hi - lo) } else { 0.0 };
+                colormap_color(map, t)
+            }
             ColorScheme::Fixed(rgb) => rgb,
         }
+    }
+}
+
+/// The numeric value of `field` on `atom`, as an f32.
+fn property_value(field: PropertyField, atom: &Atom) -> f32 {
+    match field {
+        PropertyField::BFactor => atom.b_factor as f32,
+        PropertyField::Occupancy => atom.occupancy as f32,
+    }
+}
+
+/// Fill in an auto (`None`) property range from the atoms being colored. Other
+/// schemes pass through unchanged.
+fn resolve_scheme(scheme: ColorScheme, structure: &Structure, indices: &[usize]) -> ColorScheme {
+    match scheme {
+        ColorScheme::ByProperty {
+            field,
+            map,
+            range: None,
+        } => {
+            let mut lo = f32::INFINITY;
+            let mut hi = f32::NEG_INFINITY;
+            for &i in indices {
+                let v = property_value(field, &structure.atoms[i]);
+                lo = lo.min(v);
+                hi = hi.max(v);
+            }
+            // Empty selection or all-equal values → a degenerate range; `color`
+            // maps that to t=0.0.
+            let range = if lo.is_finite() && hi.is_finite() {
+                Some((lo, hi))
+            } else {
+                Some((0.0, 0.0))
+            };
+            ColorScheme::ByProperty { field, map, range }
+        }
+        other => other,
     }
 }
 
@@ -164,10 +218,19 @@ impl Scene {
 
         let ctx = ColorCtx::new(structure);
         let bonds = structure.bonds();
+        let overrides = self.color_overrides(structure);
 
         for rep in self.representations() {
-            let scheme = scheme_of(&rep.style);
             let indices = evaluate(structure, &rep.selection);
+            // The representation's base scheme, with any auto property range
+            // resolved over the atoms it colors.
+            let base = resolve_scheme(scheme_of(&rep.style), structure, &indices);
+            // An explicit `set_color` override wins over the base scheme.
+            // `overrides` is empty when no `set_color` was used.
+            let color_at = |i: usize, a: &Atom| match overrides.get(i).copied().flatten() {
+                Some(ov) => ctx.color(ov, a),
+                None => ctx.color(base, a),
+            };
             match rep.kind {
                 RepresentationKind::Spheres => {
                     let scale = style_f32(&rep.style, "scale", DEFAULT_SPHERE_SCALE);
@@ -175,7 +238,7 @@ impl Scene {
                         let a = &structure.atoms[i];
                         g.spheres.centers.push(pos(a));
                         g.spheres.radii.push(vdw_radius(&a.element) * scale);
-                        g.spheres.colors.push(ctx.color(scheme, a));
+                        g.spheres.colors.push(color_at(i, a));
                     }
                 }
                 RepresentationKind::Sticks => {
@@ -195,18 +258,18 @@ impl Scene {
                         g.cylinders.starts.push(pa);
                         g.cylinders.ends.push(mid);
                         g.cylinders.radii.push(radius);
-                        g.cylinders.colors.push(ctx.color(scheme, a));
+                        g.cylinders.colors.push(color_at(i, a));
                         g.cylinders.starts.push(mid);
                         g.cylinders.ends.push(pb);
                         g.cylinders.radii.push(radius);
-                        g.cylinders.colors.push(ctx.color(scheme, b));
+                        g.cylinders.colors.push(color_at(j, b));
                     }
                     // Rounded joints / lone atoms: a sphere at each selected atom.
                     for &i in &indices {
                         let a = &structure.atoms[i];
                         g.spheres.centers.push(pos(a));
                         g.spheres.radii.push(radius);
-                        g.spheres.colors.push(ctx.color(scheme, a));
+                        g.spheres.colors.push(color_at(i, a));
                     }
                 }
                 RepresentationKind::Cartoon | RepresentationKind::Surface => {
@@ -225,6 +288,25 @@ impl Scene {
     /// Compile and serialize the draw list to JSON.
     pub fn to_geometry_json(&self) -> String {
         serde_json::to_string(&self.to_geometry()).expect("GeometrySpec serializes")
+    }
+
+    /// A per-atom explicit-color override map built from the scene's
+    /// `set_color` assignments, applied in order (last write wins). `None` means
+    /// the atom keeps whatever scheme its representation uses.
+    fn color_overrides(&self, structure: &Structure) -> Vec<Option<ColorScheme>> {
+        if self.color_assignments().is_empty() {
+            return Vec::new();
+        }
+        let mut map = vec![None; structure.atoms.len()];
+        for assignment in self.color_assignments() {
+            let scheme = ColorScheme::parse(&assignment.color);
+            let indices = evaluate(structure, &assignment.selection);
+            let scheme = resolve_scheme(scheme, structure, &indices);
+            for i in indices {
+                map[i] = Some(scheme);
+            }
+        }
+        map
     }
 }
 
@@ -346,5 +428,58 @@ mod tests {
             .spheres("all", style(json!({"color": "element"})))
             .sticks("all", style(json!({"color": "element"})));
         insta::assert_json_snapshot!(scene.to_geometry());
+    }
+
+    fn atom_b(serial: usize, b: f64, x: f64) -> Atom {
+        let mut a = atom(serial, "C", "C", x, 0.0, 0.0);
+        a.b_factor = b;
+        a
+    }
+
+    #[test]
+    fn property_coloring_spans_colormap_over_selection() {
+        use crate::color::{colormap_color, Colormap};
+        let st = Structure::new(vec![
+            atom_b(1, 10.0, 0.0),
+            atom_b(2, 50.0, 1.5),
+            atom_b(3, 90.0, 3.0),
+        ]);
+        let mut scene = Scene::from_rcsb("test").with_structure(st);
+        scene.spheres("all", style(json!({"color": "bfactor"})));
+        let g = scene.to_geometry();
+        // Auto range is [10, 90] over the colored atoms: ends hit the colormap
+        // endpoints, the middle lands at t=0.5.
+        assert_eq!(g.spheres.colors[0], colormap_color(Colormap::Viridis, 0.0));
+        assert_eq!(g.spheres.colors[1], colormap_color(Colormap::Viridis, 0.5));
+        assert_eq!(g.spheres.colors[2], colormap_color(Colormap::Viridis, 1.0));
+        assert_ne!(g.spheres.colors[0], g.spheres.colors[2]);
+    }
+
+    #[test]
+    fn element_carbon_recolors_only_carbons() {
+        let st = Structure::new(vec![
+            atom(1, "C1", "C", 0.0, 0.0, 0.0),
+            atom(2, "O1", "O", 1.2, 0.0, 0.0),
+        ]);
+        let mut scene = Scene::from_rcsb("test").with_structure(st);
+        scene.spheres("all", style(json!({"color": "element:cyan"})));
+        let g = scene.to_geometry();
+        assert_eq!(g.spheres.colors[0], [0.0, 1.0, 1.0]); // carbon → cyan
+        assert_eq!(g.spheres.colors[1], [1.0, 0.3, 0.3]); // oxygen → CPK
+    }
+
+    #[test]
+    fn set_color_override_beats_base_scheme() {
+        let mut a1 = atom(1, "C1", "C", 0.0, 0.0, 0.0);
+        a1.residue_seq = 1;
+        let mut a2 = atom(2, "C2", "C", 1.5, 0.0, 0.0);
+        a2.residue_seq = 2;
+        let st = Structure::new(vec![a1, a2]);
+        let mut scene = Scene::from_rcsb("test").with_structure(st);
+        scene.spheres("all", style(json!({"color": "grey"})));
+        scene.set_color("resi 1", "red");
+        let g = scene.to_geometry();
+        assert_eq!(g.spheres.colors[0], [1.0, 0.0, 0.0]); // overridden
+        assert_eq!(g.spheres.colors[1], [0.5, 0.5, 0.5]); // base grey
     }
 }

@@ -96,6 +96,14 @@ impl Scene {
         Ok(())
     }
 
+    /// Override the color of a sub-selection (applied on top of the
+    /// representations' schemes, in call order).
+    fn set_color(&mut self, selection: &str, color: &str) -> PyResult<()> {
+        validate_selection(selection)?;
+        self.inner.set_color(selection, color);
+        Ok(())
+    }
+
     /// Serialize to the JSON scene spec (declarative form).
     fn to_json(&self) -> String {
         self.inner.to_json()

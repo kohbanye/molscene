@@ -63,6 +63,16 @@ class Scene:
             self._core.set_center(str(selection))
         return self
 
+    def set_color(self, selection: Any, color: str) -> Scene:
+        """Override the color of a sub-selection, on top of the representations'
+        schemes. Applied in call order (last write wins), so you can color
+        everything one way and then repaint a few atoms::
+
+            ms.load("1ubq").cartoon(color="grey").set_color("resi 50", "red")
+        """
+        self._core.set_color(str(selection), color)
+        return self
+
     # -- serialization ------------------------------------------------------
     def to_json(self) -> str:
         """The declarative scene spec (for inspection/reproducibility)."""
