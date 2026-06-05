@@ -1,42 +1,44 @@
-//! The versioned JSON scene spec — the single contract between the core and
-//! every renderer/frontend (the TS adapter today; Mol* and the WASM web product
-//! later). These serde types ARE the wire format; there is no second model.
+//! The in-memory scene model types.
+//!
+//! These are plain Rust values — there is no serialized scene format. The `Scene`
+//! is built through the fluent API and compiled to a `GeometrySpec` (the only
+//! wire format); the building code is the source of truth.
 
-use serde::{Deserialize, Serialize};
+use crate::selection::Expr;
 
-/// Schema version of the JSON scene spec. Bumped on any breaking change so the
-/// TS adapter (and future Mol*/WASM consumers) can negotiate.
-pub const SPEC_VERSION: &str = "0.1";
-
-pub(crate) fn default_spec_version() -> String {
-    SPEC_VERSION.to_string()
+/// Per-representation style. Plain fields, not a free-form map: `color` is a
+/// string in the color grammar (parsed to a `ColorScheme` at geometry time);
+/// the rest are typed scalars.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Style {
+    pub color: Option<String>,
+    pub opacity: Option<f32>,
+    /// Sphere radius scale (spheres).
+    pub scale: Option<f32>,
+    /// Cylinder radius (sticks).
+    pub radius: Option<f32>,
 }
 
-/// Free-form style map (matches Python keyword args, e.g. `color`, `opacity`).
-pub type Style = serde_json::Map<String, serde_json::Value>;
-
-/// Where a structure's coordinates come from.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+/// Where a structure's coordinates come from (provenance only).
+#[derive(Debug, Clone, PartialEq)]
 pub enum Source {
-    /// Fetch from RCSB by PDB id (the renderer fetches it).
+    /// Fetched from RCSB by PDB id.
     Rcsb { id: String },
-    /// Inline PDB text embedded in the spec.
+    /// Inline PDB text.
     InlinePdb { data: String },
-    /// Fetch from an arbitrary URL.
+    /// Fetched from an arbitrary URL.
     Url { href: String },
 }
 
 /// A structure entry in the scene, addressable by `id` from representations.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StructureEntry {
     pub id: String,
     pub source: Source,
 }
 
 /// The kind of visual representation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepresentationKind {
     Cartoon,
     Surface,
@@ -45,35 +47,29 @@ pub enum RepresentationKind {
 }
 
 /// One representation: a selection of a structure drawn in a given style.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Representation {
     /// Id of the structure this applies to.
     pub structure: String,
     pub kind: RepresentationKind,
-    /// Opaque selection string in v0.1 (passed through to the renderer); becomes
-    /// a tagged string-or-tree in v0.2.
-    pub selection: String,
-    #[serde(default, skip_serializing_if = "Style::is_empty")]
+    pub selection: Expr,
     pub style: Style,
 }
 
 /// An explicit color override: paint a sub-selection a given color, on top of
 /// whatever scheme the representations use. Applied in order (last write wins),
-/// PyMOL-style. The color is a string in the same grammar as a representation's
-/// `color` style, keeping the spec hand-editable.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// PyMOL-style. The color is a string in the color grammar.
+#[derive(Debug, Clone, PartialEq)]
 pub struct ColorAssignment {
-    pub selection: String,
+    pub selection: Expr,
     pub color: String,
 }
 
-/// Camera state. v0.1 only supports auto zoom-to-fit, optionally centered on a
-/// selection.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Camera state. Auto zoom-to-fit, optionally centered on a selection.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Camera {
     pub auto: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub center: Option<String>,
+    pub center: Option<Expr>,
 }
 
 impl Default for Camera {

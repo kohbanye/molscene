@@ -193,18 +193,10 @@ fn midpoint(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 
 fn scheme_of(style: &crate::spec::Style) -> ColorScheme {
     style
-        .get("color")
-        .and_then(|v| v.as_str())
+        .color
+        .as_deref()
         .map(ColorScheme::parse)
         .unwrap_or(ColorScheme::Element)
-}
-
-fn style_f32(style: &crate::spec::Style, key: &str, default: f32) -> f32 {
-    style
-        .get(key)
-        .and_then(|v| v.as_f64())
-        .map(|v| v as f32)
-        .unwrap_or(default)
 }
 
 impl Scene {
@@ -233,7 +225,7 @@ impl Scene {
             };
             match rep.kind {
                 RepresentationKind::Spheres => {
-                    let scale = style_f32(&rep.style, "scale", DEFAULT_SPHERE_SCALE);
+                    let scale = rep.style.scale.unwrap_or(DEFAULT_SPHERE_SCALE);
                     for &i in &indices {
                         let a = &structure.atoms[i];
                         g.spheres.centers.push(pos(a));
@@ -242,7 +234,7 @@ impl Scene {
                     }
                 }
                 RepresentationKind::Sticks => {
-                    let radius = style_f32(&rep.style, "radius", DEFAULT_STICK_RADIUS);
+                    let radius = rep.style.radius.unwrap_or(DEFAULT_STICK_RADIUS);
                     let selected: std::collections::HashSet<usize> =
                         indices.iter().copied().collect();
                     // Half-cylinders, split at the bond midpoint and colored by
@@ -346,7 +338,16 @@ fn camera_for(structure: &Structure) -> GeomCamera {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use crate::selection::Expr;
+    use crate::spec::Style;
+
+    /// A style with just a `color` set.
+    fn colored(color: &str) -> Style {
+        Style {
+            color: Some(color.into()),
+            ..Default::default()
+        }
+    }
 
     fn atom(serial: usize, name: &str, elem: &str, x: f64, y: f64, z: f64) -> Atom {
         Atom {
@@ -365,10 +366,6 @@ mod tests {
         }
     }
 
-    fn style(v: serde_json::Value) -> crate::spec::Style {
-        v.as_object().cloned().unwrap_or_default()
-    }
-
     fn two_carbons() -> Scene {
         let st = Structure::new(vec![
             atom(1, "C1", "C", 0.0, 0.0, 0.0),
@@ -380,7 +377,7 @@ mod tests {
     #[test]
     fn spheres_one_per_atom_with_vdw_radius() {
         let mut scene = two_carbons();
-        scene.spheres("all", style(json!({"color": "element"})));
+        scene.spheres(Expr::All, colored("element"));
         let g = scene.to_geometry();
         assert_eq!(g.spheres.centers.len(), 2);
         assert_eq!(g.spheres.radii, vec![1.70, 1.70]);
@@ -390,7 +387,7 @@ mod tests {
     #[test]
     fn sticks_make_two_half_cylinders_per_bond_plus_caps() {
         let mut scene = two_carbons();
-        scene.sticks("all", style(json!({"color": "element"})));
+        scene.sticks(Expr::All, colored("element"));
         let g = scene.to_geometry();
         // one bond -> two half cylinders
         assert_eq!(g.cylinders.starts.len(), 2);
@@ -406,7 +403,7 @@ mod tests {
     #[test]
     fn empty_when_no_structure() {
         let mut scene = Scene::from_rcsb("test");
-        scene.spheres("all", style(json!({})));
+        scene.spheres(Expr::All, Style::default());
         let g = scene.to_geometry();
         assert!(g.spheres.centers.is_empty());
     }
@@ -414,8 +411,8 @@ mod tests {
     #[test]
     fn cartoon_and_surface_are_skipped() {
         let mut scene = two_carbons();
-        scene.cartoon("all", style(json!({})));
-        scene.surface("all", style(json!({})));
+        scene.cartoon(Expr::All, Style::default());
+        scene.surface(Expr::All, Style::default());
         let g = scene.to_geometry();
         assert!(g.spheres.centers.is_empty());
         assert!(g.cylinders.starts.is_empty());
@@ -425,8 +422,8 @@ mod tests {
     fn geometry_snapshot() {
         let mut scene = two_carbons();
         scene
-            .spheres("all", style(json!({"color": "element"})))
-            .sticks("all", style(json!({"color": "element"})));
+            .spheres(Expr::All, colored("element"))
+            .sticks(Expr::All, colored("element"));
         insta::assert_json_snapshot!(scene.to_geometry());
     }
 
@@ -445,7 +442,7 @@ mod tests {
             atom_b(3, 90.0, 3.0),
         ]);
         let mut scene = Scene::from_rcsb("test").with_structure(st);
-        scene.spheres("all", style(json!({"color": "bfactor"})));
+        scene.spheres(Expr::All, colored("bfactor"));
         let g = scene.to_geometry();
         // Auto range is [10, 90] over the colored atoms: ends hit the colormap
         // endpoints, the middle lands at t=0.5.
@@ -462,7 +459,7 @@ mod tests {
             atom(2, "O1", "O", 1.2, 0.0, 0.0),
         ]);
         let mut scene = Scene::from_rcsb("test").with_structure(st);
-        scene.spheres("all", style(json!({"color": "element:cyan"})));
+        scene.spheres(Expr::All, colored("element:cyan"));
         let g = scene.to_geometry();
         assert_eq!(g.spheres.colors[0], [0.0, 1.0, 1.0]); // carbon → cyan
         assert_eq!(g.spheres.colors[1], [1.0, 0.3, 0.3]); // oxygen → CPK
@@ -476,8 +473,8 @@ mod tests {
         a2.residue_seq = 2;
         let st = Structure::new(vec![a1, a2]);
         let mut scene = Scene::from_rcsb("test").with_structure(st);
-        scene.spheres("all", style(json!({"color": "grey"})));
-        scene.set_color("resi 1", "red");
+        scene.spheres(Expr::All, colored("grey"));
+        scene.set_color(Expr::resi(1, 1), "red");
         let g = scene.to_geometry();
         assert_eq!(g.spheres.colors[0], [1.0, 0.0, 0.0]); // overridden
         assert_eq!(g.spheres.colors[1], [0.5, 0.5, 0.5]); // base grey

@@ -1,35 +1,29 @@
-//! The Scene model: the single in-memory model that serializes directly to the
-//! JSON scene spec. Built fluently (`.cartoon().surface().sticks()`), then
-//! handed to a renderer via [`Scene::to_json`].
+//! The Scene model: the in-memory model built fluently
+//! (`.cartoon().surface().sticks()`) and compiled to a `GeometrySpec` via
+//! [`Scene::to_geometry`]. The Scene itself is not serialized — the building code
+//! is the source of truth.
 
-use serde::{Deserialize, Serialize};
-
+use crate::selection::Expr;
 use crate::spec::{
-    default_spec_version, Camera, ColorAssignment, Representation, RepresentationKind, Source,
-    StructureEntry, Style,
+    Camera, ColorAssignment, Representation, RepresentationKind, Source, StructureEntry, Style,
 };
 use crate::structure::Structure;
 
 pub use crate::spec::{Camera as CameraSpec, Representation as RepresentationSpec};
 pub use crate::spec::{RepresentationKind as Kind, Source as StructureSource};
 
-/// Id used for the (single, in v0.1) structure.
+/// Id used for the (single, for now) structure.
 const STRUCTURE_ID: &str = "s0";
 
 /// A molecular scene: a set of structures, the representations drawn over them,
-/// and the camera. Serializes directly to the versioned scene spec.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// explicit color overrides, and the camera. An in-memory model only.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Scene {
-    #[serde(rename = "spec_version", default = "default_spec_version")]
-    spec_version: String,
     structures: Vec<StructureEntry>,
     representations: Vec<Representation>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     colors: Vec<ColorAssignment>,
     camera: Camera,
-    /// Parsed coordinates, kept in memory for native geometry generation. Not
-    /// part of the serialized scene spec.
-    #[serde(skip)]
+    /// Parsed coordinates, kept in memory for native geometry generation.
     structure: Option<Structure>,
 }
 
@@ -37,7 +31,6 @@ impl Scene {
     /// Create a scene from a structure source.
     pub fn new(source: Source) -> Self {
         Self {
-            spec_version: default_spec_version(),
             structures: vec![StructureEntry {
                 id: STRUCTURE_ID.to_string(),
                 source,
@@ -60,7 +53,7 @@ impl Scene {
     }
 
     /// Parse `text` and build a scene that holds the resulting coordinates.
-    /// `source` records provenance in the spec (e.g. an RCSB id).
+    /// `source` records provenance (e.g. an RCSB id).
     #[cfg(feature = "parse")]
     pub fn from_pdb(text: &str, source: Source) -> Result<Self, crate::parse::ParseError> {
         let structure = crate::parse::parse_str(text, crate::parse::InputFormat::Pdb)?;
@@ -80,43 +73,43 @@ impl Scene {
         self.structure.as_ref()
     }
 
-    fn push(&mut self, kind: RepresentationKind, selection: &str, style: Style) -> &mut Self {
+    fn push(&mut self, kind: RepresentationKind, selection: Expr, style: Style) -> &mut Self {
         self.representations.push(Representation {
             structure: STRUCTURE_ID.to_string(),
             kind,
-            selection: selection.to_string(),
+            selection,
             style,
         });
         self
     }
 
-    pub fn cartoon(&mut self, selection: &str, style: Style) -> &mut Self {
+    pub fn cartoon(&mut self, selection: Expr, style: Style) -> &mut Self {
         self.push(RepresentationKind::Cartoon, selection, style)
     }
 
-    pub fn surface(&mut self, selection: &str, style: Style) -> &mut Self {
+    pub fn surface(&mut self, selection: Expr, style: Style) -> &mut Self {
         self.push(RepresentationKind::Surface, selection, style)
     }
 
-    pub fn sticks(&mut self, selection: &str, style: Style) -> &mut Self {
+    pub fn sticks(&mut self, selection: Expr, style: Style) -> &mut Self {
         self.push(RepresentationKind::Sticks, selection, style)
     }
 
-    pub fn spheres(&mut self, selection: &str, style: Style) -> &mut Self {
+    pub fn spheres(&mut self, selection: Expr, style: Style) -> &mut Self {
         self.push(RepresentationKind::Spheres, selection, style)
     }
 
-    /// Center the camera on a selection (still auto-fits the zoom in v0.1).
-    pub fn center(&mut self, selection: &str) -> &mut Self {
-        self.camera.center = Some(selection.to_string());
+    /// Center the camera on a selection (still auto-fits the zoom).
+    pub fn center(&mut self, selection: Expr) -> &mut Self {
+        self.camera.center = Some(selection);
         self
     }
 
     /// Override the color of a sub-selection, on top of the representations'
     /// schemes. Applied in call order (last write wins) at geometry time.
-    pub fn set_color(&mut self, selection: &str, color: &str) -> &mut Self {
+    pub fn set_color(&mut self, selection: Expr, color: &str) -> &mut Self {
         self.colors.push(ColorAssignment {
-            selection: selection.to_string(),
+            selection,
             color: color.to_string(),
         });
         self
@@ -136,46 +129,44 @@ impl Scene {
     pub fn camera(&self) -> &Camera {
         &self.camera
     }
-
-    /// Serialize to the JSON scene spec.
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).expect("Scene serializes")
-    }
-
-    /// Serialize to pretty JSON.
-    pub fn to_json_pretty(&self) -> String {
-        serde_json::to_string_pretty(self).expect("Scene serializes")
-    }
-
-    /// Serialize to a `serde_json::Value`.
-    pub fn to_value(&self) -> serde_json::Value {
-        serde_json::to_value(self).expect("Scene serializes")
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
-    fn style(v: serde_json::Value) -> Style {
-        v.as_object().cloned().unwrap_or_default()
-    }
 
     #[test]
     fn builds_representations_in_order() {
         let mut scene = Scene::from_rcsb("1ubq");
         scene
-            .cartoon("protein", style(json!({"color": "spectrum"})))
-            .surface("protein", style(json!({"opacity": 0.25})))
-            .sticks("ligand", style(json!({"color": "element"})));
+            .cartoon(
+                Expr::Protein,
+                Style {
+                    color: Some("spectrum".into()),
+                    ..Default::default()
+                },
+            )
+            .surface(
+                Expr::Protein,
+                Style {
+                    opacity: Some(0.25),
+                    ..Default::default()
+                },
+            )
+            .sticks(
+                Expr::Ligand,
+                Style {
+                    color: Some("element".into()),
+                    ..Default::default()
+                },
+            );
 
         let reps = scene.representations();
         assert_eq!(reps.len(), 3);
         assert_eq!(reps[0].kind, RepresentationKind::Cartoon);
-        assert_eq!(reps[0].selection, "protein");
+        assert_eq!(reps[0].selection, Expr::Protein);
         assert_eq!(reps[2].kind, RepresentationKind::Sticks);
-        assert_eq!(reps[2].selection, "ligand");
+        assert_eq!(reps[2].selection, Expr::Ligand);
     }
 
     #[test]
@@ -188,41 +179,20 @@ mod tests {
     #[test]
     fn center_sets_camera_target() {
         let mut scene = Scene::from_rcsb("1ubq");
-        scene.center("ligand");
-        assert_eq!(scene.camera().center.as_deref(), Some("ligand"));
-    }
-
-    #[test]
-    fn roundtrips_through_json() {
-        let mut scene = Scene::from_rcsb("1ubq");
-        scene.cartoon("protein", style(json!({"color": "spectrum"})));
-        let json = scene.to_json();
-        let back: Scene = serde_json::from_str(&json).unwrap();
-        assert_eq!(scene, back);
+        scene.center(Expr::Ligand);
+        assert_eq!(scene.camera().center, Some(Expr::Ligand));
     }
 
     #[test]
     fn set_color_records_overrides_in_order() {
         let mut scene = Scene::from_rcsb("1ubq");
         scene
-            .set_color("protein", "grey")
-            .set_color("resi 50", "red");
+            .set_color(Expr::Protein, "grey")
+            .set_color(Expr::resi(50, 50), "red");
         let overrides = scene.color_assignments();
         assert_eq!(overrides.len(), 2);
-        assert_eq!(overrides[0].selection, "protein");
+        assert_eq!(overrides[0].selection, Expr::Protein);
         assert_eq!(overrides[0].color, "grey");
         assert_eq!(overrides[1].color, "red");
-    }
-
-    #[test]
-    fn matches_spec_snapshot() {
-        let mut scene = Scene::from_rcsb("1ubq");
-        scene
-            .cartoon("protein", style(json!({"color": "spectrum"})))
-            .surface("protein", style(json!({"opacity": 0.25})))
-            .sticks("ligand", style(json!({"color": "element"})))
-            .set_color("resi 50", "red");
-
-        insta::assert_json_snapshot!(scene.to_value());
     }
 }
