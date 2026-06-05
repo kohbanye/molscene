@@ -17,9 +17,9 @@ Three Rust crates + a Python facade + a TypeScript viewer:
 - `crates/molscene-core` — the engine. Renderer- and binding-agnostic; **must never
   depend on PyO3 or wasm-bindgen**. Modules: `structure` (atom model + radii + bond
   inference), `parse` (pdbtbx adapter, behind the `parse` feature), `selection`
-  (string → atom indices), `color` (palettes + scheme resolution), `scene`
-  (declarative `Scene` + serde JSON spec), `geometry` (compiles a `Scene` into a
-  `GeometrySpec` draw list).
+  (typed `Expr` → atom indices), `color` (palettes + scheme resolution), `scene`
+  (in-memory `Scene` model — built fluently, not serialized), `geometry` (compiles
+  a `Scene` into a `GeometrySpec` draw list).
 - `crates/molscene-py` — thin PyO3 bindings → the `molscene._core` extension module.
 - `crates/molscene-wasm` — wasm-bindgen bindings (stub today; the pure-web path).
 - `python/molscene` — fluent facade (`load`, `Scene`, `ms.select` DSL, notebook display).
@@ -40,10 +40,17 @@ scene.show()/_repr_html_ # scene.py → _core.to_geometry_json()
 
 ### Architectural invariants (read before changing things)
 
-- **Two specs, one model.** The declarative `Scene` (high-level, `to_json`/`to_dict`)
-  compiles to a low-level renderer-neutral `GeometrySpec` (`to_geometry`). The
-  `GeometrySpec` is the contract the renderer consumes — add rendering features by
-  extending it, not by teaching the renderer about molecules.
+> **In transition** — see ROADMAP "Architecture shift — structured model". The
+> serialized `Scene` spec and the textual selection parser are being removed in
+> favor of a code-as-source-of-truth model and typed `Expr` selections. The
+> invariants below describe that target; some code (string selections, `to_json`)
+> still reflects the previous model until the refactor lands.
+
+- **One serialized contract: `GeometrySpec`.** The in-memory `Scene` (built via the
+  fluent API) compiles to a low-level renderer-neutral `GeometrySpec` (`to_geometry`).
+  Only the `GeometrySpec` is serialized; the `Scene` itself has no wire format — the
+  building code is the source of truth. Add rendering features by extending the
+  `GeometrySpec`, not by teaching the renderer about molecules.
 - **Geometry is lazy.** `.sticks()` etc. only record intent; geometry is computed once
   at display time in `to_geometry`.
 - **WASM-safe core.** `geometry` / `color` / `selection` / `structure` are pure compute
@@ -59,11 +66,13 @@ scene.show()/_repr_html_ # scene.py → _core.to_geometry_json()
 is O(n²) (the selection k-d tree only covers spatial queries, not bond inference). These
 are tracked as milestones in `ROADMAP.md`.
 
-Selections are fully evaluated as of v0.2: `selection.rs` parses the string into an
-`Expr` tree (boolean `and`/`or`/`not`, spatial `around`/`within`/`expand`/`beyond` via a
-`kiddo` k-d tree, aggregation `byres`/`bychain`/`bymol`, numeric `b`/`q`). The string
-stays the canonical, hand-editable form in the `Scene` spec; the Python `& | ~` operators
-just compose it. Invalid selections raise `ValueError` (validated in the PyO3 layer).
+Selections are typed `Expr` values, not strings: `selection.rs` holds the `Expr` tree
+(boolean `and`/`or`/`not`, spatial `around`/`within`/`expand`/`beyond` via a `kiddo`
+k-d tree, aggregation `byres`/`bychain`/`bymol`, numeric `b`/`q`) and its evaluator.
+They are built and composed through the API (`ms.select` + `& | ~`), which constructs
+`Expr` nodes directly — there is no string parser, so an `Expr` is valid by
+construction. (Until the refactor lands, `ms.select` still builds a string the core
+parses; see the transition note above.)
 
 ## Commands
 
@@ -78,7 +87,7 @@ cargo test -p molscene-core geometry::tests::geometry_snapshot   # one test
 cargo test --workspace                          # all crates
 cargo fmt --all && cargo clippy -p molscene-core -- -D warnings
 
-# insta snapshots (scene/geometry JSON): regenerate, then review the .snap diff
+# insta snapshots (geometry JSON): regenerate, then review the .snap diff
 INSTA_UPDATE=always cargo test -p molscene-core
 
 # Viewer (TypeScript)
