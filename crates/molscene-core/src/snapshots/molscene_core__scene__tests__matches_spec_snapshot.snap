@@ -6,6 +6,12 @@ expression: scene.to_value()
   "camera": {
     "auto": true
   },
+  "colors": [
+    {
+      "color": "red",
+      "selection": "resi 50"
+    }
+  ],
   "representations": [
     {
       "kind": "cartoon",

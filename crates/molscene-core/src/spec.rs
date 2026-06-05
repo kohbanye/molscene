@@ -57,6 +57,16 @@ pub struct Representation {
     pub style: Style,
 }
 
+/// An explicit color override: paint a sub-selection a given color, on top of
+/// whatever scheme the representations use. Applied in order (last write wins),
+/// PyMOL-style. The color is a string in the same grammar as a representation's
+/// `color` style, keeping the spec hand-editable.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ColorAssignment {
+    pub selection: String,
+    pub color: String,
+}
+
 /// Camera state. v0.1 only supports auto zoom-to-fit, optionally centered on a
 /// selection.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
