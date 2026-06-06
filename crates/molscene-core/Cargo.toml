@@ -11,6 +11,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 pdbtbx = { version = "0.12", optional = true }
 kiddo = { version = "5", default-features = false }
+fast-surface-nets = "0.2"
 
 [features]
 default = ["parse"]

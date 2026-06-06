@@ -11,7 +11,7 @@
 use std::collections::HashSet;
 
 use crate::color::Rgb;
-use crate::geometry::Meshes;
+use crate::geometry::Mesh;
 use crate::structure::{Atom, Ss, Structure};
 
 // -- tunables ---------------------------------------------------------------
@@ -550,7 +550,7 @@ fn extrude_segment(
     seg: &Segment,
     radius: f32,
     params: &CartoonParams,
-    out: &mut Meshes,
+    out: &mut Mesh,
 ) {
     let sections = sections_for(seg, radius);
     if sections.len() < 2 {
@@ -702,7 +702,7 @@ pub fn build_cartoon(
     selected: &[usize],
     style_radius: Option<f32>,
     params: &CartoonParams,
-    out: &mut Meshes,
+    out: &mut Mesh,
 ) {
     let radius = style_radius.unwrap_or(R_TUBE);
     let mut segments = backbone_segments(structure, selected);
@@ -872,7 +872,7 @@ mod tests {
     #[test]
     fn mesh_is_non_empty_and_consistent() {
         let s = ideal_helix(12);
-        let mut out = Meshes::default();
+        let mut out = Mesh::default();
         let params = CartoonParams { color_fn: &grey };
         build_cartoon(&s, &all(&s), None, &params, &mut out);
         assert!(!out.positions.is_empty());
@@ -886,7 +886,7 @@ mod tests {
     #[test]
     fn ss_coloring_uses_palette_only() {
         let s = ideal_helix(12);
-        let mut out = Meshes::default();
+        let mut out = Mesh::default();
         let params = CartoonParams { color_fn: &by_ss };
         build_cartoon(&s, &all(&s), None, &params, &mut out);
         let palette = [ss_color(Ss::Helix), ss_color(Ss::Sheet), ss_color(Ss::Loop)];
@@ -902,7 +902,7 @@ mod tests {
             atom(1, "C1", 1, 0.0, 0.0, 0.0),
             atom(2, "C2", 1, 1.5, 0.0, 0.0),
         ]);
-        let mut out = Meshes::default();
+        let mut out = Mesh::default();
         let params = CartoonParams { color_fn: &grey };
         build_cartoon(&s, &all(&s), None, &params, &mut out);
         assert!(out.positions.is_empty());
