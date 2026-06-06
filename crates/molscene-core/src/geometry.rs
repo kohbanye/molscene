@@ -38,6 +38,17 @@ pub struct Cylinders {
     pub colors: Vec<Rgb>,
 }
 
+/// A triangle mesh with per-vertex normals and colors. Used by cartoon today
+/// (surface later). `indices` are triangle-list (groups of three) into the
+/// vertex arrays, which all share the same length.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct Meshes {
+    pub positions: Vec<[f32; 3]>,
+    pub normals: Vec<[f32; 3]>,
+    pub indices: Vec<u32>,
+    pub colors: Vec<Rgb>,
+}
+
 /// Camera framing as a bounding sphere the renderer fits to.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeomCamera {
@@ -59,6 +70,7 @@ impl Default for GeomCamera {
 pub struct GeometrySpec {
     pub spheres: Spheres,
     pub cylinders: Cylinders,
+    pub meshes: Meshes,
     pub camera: GeomCamera,
     pub background: Rgb,
 }
@@ -68,6 +80,7 @@ impl Default for GeometrySpec {
         Self {
             spheres: Spheres::default(),
             cylinders: Cylinders::default(),
+            meshes: Meshes::default(),
             camera: GeomCamera::default(),
             background: [1.0, 1.0, 1.0],
         }
@@ -129,6 +142,9 @@ impl ColorCtx {
                 };
                 spectrum_color(t)
             }
+            // Secondary-structure coloring is resolved by the cartoon module
+            // (it owns per-residue SS); other representations degrade to CPK.
+            ColorScheme::SecondaryStructure => element_color(&atom.element),
             ColorScheme::ByProperty { field, map, range } => {
                 // An unresolved (auto) range means we never saw the atom set;
                 // fall back to a flat t=0 rather than panicking.
@@ -264,10 +280,35 @@ impl Scene {
                         g.spheres.colors.push(color_at(i, a));
                     }
                 }
-                RepresentationKind::Cartoon | RepresentationKind::Surface => {
+                RepresentationKind::Cartoon => {
+                    // Resolve per-residue color with full precedence: an explicit
+                    // `set_color` override wins, then the base scheme — where
+                    // `secondary_structure` maps the residue's assigned SS to the
+                    // cartoon palette (the only place SS is known).
+                    let cartoon_color = |i: usize, a: &Atom, ss: crate::structure::Ss| -> Rgb {
+                        match overrides.get(i).copied().flatten() {
+                            Some(ColorScheme::SecondaryStructure) => crate::cartoon::ss_color(ss),
+                            Some(ov) => ctx.color(ov, a),
+                            None => match base {
+                                ColorScheme::SecondaryStructure => crate::cartoon::ss_color(ss),
+                                other => ctx.color(other, a),
+                            },
+                        }
+                    };
+                    let params = crate::cartoon::CartoonParams {
+                        color_fn: &cartoon_color,
+                    };
+                    crate::cartoon::build_cartoon(
+                        structure,
+                        &indices,
+                        rep.style.radius,
+                        &params,
+                        &mut g.meshes,
+                    );
+                }
+                RepresentationKind::Surface => {
                     eprintln!(
-                        "molscene: {:?} is not yet supported by the native renderer; skipping.",
-                        rep.kind
+                        "molscene: Surface is not yet supported by the native renderer; skipping.",
                     );
                 }
             }
@@ -409,13 +450,64 @@ mod tests {
     }
 
     #[test]
-    fn cartoon_and_surface_are_skipped() {
+    fn cartoon_without_backbone_and_surface_emit_nothing() {
+        // The two-carbon fixture has no Cα backbone, so cartoon traces nothing;
+        // surface is still unsupported.
         let mut scene = two_carbons();
         scene.cartoon(Expr::All, Style::default());
         scene.surface(Expr::All, Style::default());
         let g = scene.to_geometry();
         assert!(g.spheres.centers.is_empty());
         assert!(g.cylinders.starts.is_empty());
+        assert!(g.meshes.positions.is_empty());
+    }
+
+    /// A minimal protein backbone: `n` residues of N/CA/C/O laid out along x.
+    fn backbone(n: usize) -> Structure {
+        let mut atoms = Vec::new();
+        let mut serial = 1;
+        for k in 0..n {
+            let base = k as f64 * 3.8;
+            for (name, dx, dy) in [
+                ("N", 0.0, 0.0),
+                ("CA", 1.0, 0.3),
+                ("C", 2.0, 0.0),
+                ("O", 2.2, 0.6),
+            ] {
+                let mut a = atom(serial, name, "C", base + dx, dy, 0.0);
+                a.residue_name = "ALA".into();
+                a.residue_seq = k as i32 + 1;
+                atoms.push(a);
+                serial += 1;
+            }
+        }
+        Structure::new(atoms)
+    }
+
+    #[test]
+    fn cartoon_emits_a_mesh_for_a_backbone() {
+        let scene = Scene::from_rcsb("test").with_structure(backbone(6));
+        let mut scene = scene;
+        scene.cartoon(Expr::All, colored("spectrum"));
+        let g = scene.to_geometry();
+        assert!(!g.meshes.positions.is_empty());
+        assert_eq!(g.meshes.positions.len(), g.meshes.colors.len());
+        assert_eq!(g.meshes.indices.len() % 3, 0);
+    }
+
+    #[test]
+    fn cartoon_set_color_overrides_ss_coloring() {
+        // `set_color` must win over the cartoon's secondary-structure coloring
+        // for the overridden residue (and only that residue).
+        let mut scene = Scene::from_rcsb("test").with_structure(backbone(6));
+        scene
+            .cartoon(Expr::All, colored("secondary_structure"))
+            .set_color(Expr::resi(2, 2), "red");
+        let g = scene.to_geometry();
+        let red = [1.0, 0.0, 0.0];
+        assert!(g.meshes.colors.contains(&red), "override color must appear");
+        // Other residues keep an SS palette color, not red everywhere.
+        assert!(g.meshes.colors.iter().any(|c| *c != red));
     }
 
     #[test]

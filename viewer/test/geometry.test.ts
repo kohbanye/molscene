@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildInstances,
+  flattenVec3,
   quaternionFromYTo,
   type GeometrySpec,
 } from "../src/geometry";
@@ -37,9 +38,25 @@ const SPEC: GeometrySpec = {
     radii: [0.25],
     colors: [[1, 0, 0]],
   },
+  meshes: { positions: [], normals: [], indices: [], colors: [] },
   camera: { center: [0, 0, 0], radius: 5 },
   background: [1, 1, 1],
 };
+
+describe("flattenVec3", () => {
+  it("packs Vec3[] into a flat Float32Array", () => {
+    const out = flattenVec3([
+      [1, 2, 3],
+      [4, 5, 6],
+    ]);
+    expect(out).toBeInstanceOf(Float32Array);
+    expect(Array.from(out)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("returns an empty array for no vertices", () => {
+    expect(flattenVec3([]).length).toBe(0);
+  });
+});
 
 describe("buildInstances", () => {
   it("maps spheres to translate+uniform-scale instances", () => {

@@ -18,6 +18,14 @@ export interface Cylinders {
   colors: Vec3[];
 }
 
+/** A triangle mesh with per-vertex normals and colors (cartoon today). */
+export interface Meshes {
+  positions: Vec3[];
+  normals: Vec3[];
+  indices: number[];
+  colors: Vec3[];
+}
+
 export interface GeomCamera {
   center: Vec3;
   radius: number;
@@ -26,8 +34,20 @@ export interface GeomCamera {
 export interface GeometrySpec {
   spheres: Spheres;
   cylinders: Cylinders;
+  meshes: Meshes;
   camera: GeomCamera;
   background: Vec3;
+}
+
+/** Flatten an array of Vec3 into a packed Float32Array for a BufferAttribute. */
+export function flattenVec3(v: Vec3[]): Float32Array {
+  const out = new Float32Array(v.length * 3);
+  for (let i = 0; i < v.length; i++) {
+    out[i * 3] = v[i][0];
+    out[i * 3 + 1] = v[i][1];
+    out[i * 3 + 2] = v[i][2];
+  }
+  return out;
 }
 
 export interface Instance {

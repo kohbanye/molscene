@@ -11,6 +11,8 @@ import pytest
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "dipeptide.pdb")
 # dipeptide.pdb: 10 atoms (ALA 5 + GLY 4 + HOH 1), 1 water (HETATM).
+HELIX_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "helix.pdb")
+# helix.pdb: 12-residue ideal alpha-helix (N/CA/C/O) with a HELIX annotation.
 
 
 def build_scene():
@@ -50,6 +52,28 @@ def test_sticks_generate_cylinders():
     # Bonds within the dipeptide -> at least one cylinder (two halves per bond).
     assert len(geom["cylinders"]["starts"]) > 0
     assert len(geom["cylinders"]["starts"]) % 2 == 0
+
+
+def test_cartoon_emits_meshes():
+    geom = (
+        ms.load(HELIX_FIXTURE)
+        .cartoon(ms.select.protein(), color="spectrum")
+        .to_geometry()
+    )
+    pos = geom["meshes"]["positions"]
+    assert len(pos) > 0
+    assert len(geom["meshes"]["colors"]) == len(pos)
+    assert len(geom["meshes"]["normals"]) == len(pos)
+    assert len(geom["meshes"]["indices"]) % 3 == 0
+
+
+def test_cartoon_secondary_structure_coloring():
+    geom = ms.load(HELIX_FIXTURE).cartoon(ms.select.protein(), color="ss").to_geometry()
+    colors = geom["meshes"]["colors"]
+    assert len(colors) > 0
+    # SS coloring uses only the helix/sheet/loop palette.
+    palette = {(1.0, 0.0, 1.0), (1.0, 1.0, 0.0), (0.0, 1.0, 1.0)}
+    assert all(tuple(c) in palette for c in colors)
 
 
 def test_camera_is_bounding_sphere():

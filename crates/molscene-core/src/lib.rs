@@ -8,6 +8,7 @@
 //! This crate must never depend on PyO3 or wasm-bindgen — the `molscene-py`
 //! and `molscene-wasm` crates are thin translation shells over this API.
 
+pub mod cartoon;
 pub mod color;
 pub mod geometry;
 pub mod scene;
@@ -18,8 +19,8 @@ pub mod structure;
 #[cfg(feature = "parse")]
 pub mod parse;
 
-pub use geometry::{Cylinders, GeometrySpec, Spheres};
+pub use geometry::{Cylinders, GeometrySpec, Meshes, Spheres};
 pub use scene::Scene;
 pub use selection::{evaluate, CmpOp, Expr, NumField};
 pub use spec::{Camera, Representation, RepresentationKind, Source, StructureEntry, Style};
-pub use structure::{covalent_radius, vdw_radius, Atom, Structure};
+pub use structure::{covalent_radius, vdw_radius, Atom, Ss, Structure};

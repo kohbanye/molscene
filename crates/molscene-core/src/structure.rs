@@ -32,15 +32,51 @@ pub struct Atom {
     pub z: f64,
 }
 
+/// Secondary-structure class for a residue. Filled either from a file's
+/// `HELIX`/`SHEET` annotations (preferred) or computed geometrically by the
+/// cartoon module when no annotation is present.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ss {
+    Helix,
+    Sheet,
+    Loop,
+}
+
 /// A parsed molecular structure.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Structure {
     pub atoms: Vec<Atom>,
+    /// Per-residue secondary structure from file annotations, keyed by
+    /// `(chain_id, residue_seq)`. Empty when the source had no `HELIX`/`SHEET`
+    /// records — in that case the cartoon builder computes SS geometrically.
+    /// Only `Helix`/`Sheet` residues are stored; anything absent is `Loop`.
+    ss: std::collections::HashMap<(String, i32), Ss>,
 }
 
 impl Structure {
     pub fn new(atoms: Vec<Atom>) -> Self {
-        Self { atoms }
+        Self {
+            atoms,
+            ss: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Whether the structure carries file-provided secondary-structure
+    /// annotations (i.e. the source had `HELIX`/`SHEET` records).
+    pub fn has_ss_annotations(&self) -> bool {
+        !self.ss.is_empty()
+    }
+
+    /// The annotated secondary structure for a residue, if any. Residues that
+    /// fall outside every annotated range return `None` (treated as `Loop`).
+    pub fn ss_at(&self, chain: &str, seq: i32) -> Option<Ss> {
+        self.ss.get(&(chain.to_string(), seq)).copied()
+    }
+
+    /// Record an annotated secondary structure for a residue. Called by the
+    /// parser when reading `HELIX`/`SHEET` records.
+    pub fn set_ss(&mut self, chain: impl Into<String>, seq: i32, ss: Ss) {
+        self.ss.insert((chain.into(), seq), ss);
     }
 
     /// Number of atoms.
@@ -198,6 +234,20 @@ mod tests {
     fn overlapping_atoms_do_not_bond() {
         let s = Structure::new(vec![carbon(1, 0.0, 0.0, 0.0), carbon(2, 0.05, 0.0, 0.0)]);
         assert!(s.bonds().is_empty());
+    }
+
+    #[test]
+    fn ss_annotations_default_empty_and_round_trip() {
+        let mut s = Structure::new(vec![carbon(1, 0.0, 0.0, 0.0)]);
+        assert!(!s.has_ss_annotations());
+        assert_eq!(s.ss_at("A", 1), None);
+        s.set_ss("A", 1, Ss::Helix);
+        s.set_ss("A", 2, Ss::Sheet);
+        assert!(s.has_ss_annotations());
+        assert_eq!(s.ss_at("A", 1), Some(Ss::Helix));
+        assert_eq!(s.ss_at("A", 2), Some(Ss::Sheet));
+        assert_eq!(s.ss_at("A", 3), None); // unannotated → Loop
+        assert_eq!(s.ss_at("B", 1), None); // wrong chain
     }
 
     #[test]
