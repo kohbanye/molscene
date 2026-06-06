@@ -80,9 +80,7 @@ def test_cartoon_secondary_structure_coloring():
 
 
 def test_surface_emits_a_transparent_mesh():
-    geom = (
-        ms.load(FIXTURE).surface(ms.select.protein(), opacity=0.3).to_geometry()
-    )
+    geom = ms.load(FIXTURE).surface(ms.select.protein(), opacity=0.3).to_geometry()
     assert len(geom["meshes"]) >= 1
     mesh = geom["meshes"][-1]
     pos = mesh["positions"]
