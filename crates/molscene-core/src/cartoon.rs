@@ -25,8 +25,7 @@ const R_TUBE: f32 = 0.3;
 /// β-strand ribbon half-width and half-thickness.
 const RIBBON_HW: f32 = 0.95;
 const RIBBON_HT: f32 = 0.16;
-/// α-helix ribbon — wider and thicker than a strand so the coil reads as a
-/// proper flat ribbon rather than a thin twisted band.
+/// α-helix ribbon half-width and half-thickness.
 const HELIX_HW: f32 = 1.15;
 const HELIX_HT: f32 = 0.28;
 /// Cross-section flatness exponent: 2 → ellipse (loop tube), higher → flat
@@ -490,11 +489,10 @@ fn transport(prev: V3, t: V3) -> V3 {
     }
 }
 
-/// The ribbon's wide-axis direction from the local path curvature: for a helix
-/// the curvature points toward the helix axis, so the wide axis (perpendicular
-/// to it) wraps tangentially and the flat face looks radially outward — a smooth
-/// wide coil rather than a fast-twisting band. `None` if curvature is degenerate
-/// (a straight run).
+/// The ribbon's wide-axis direction from the local path curvature: the
+/// curvature points toward the helix axis, so the wide axis (perpendicular to
+/// it) wraps tangentially and the flat face looks radially outward. `None` if
+/// curvature is degenerate (a straight run).
 fn curvature_wide_axis(sections: &[Section], i: usize, tangent: V3) -> Option<V3> {
     let n = sections.len();
     let w = (SUBDIV / 2).max(1);
@@ -507,7 +505,7 @@ fn curvature_wide_axis(sections: &[Section], i: usize, tangent: V3) -> Option<V3
 
 /// Per-section orthonormal `(tangent, normal, binormal)` frames, with flip
 /// correction so the ribbon does not self-twist. `normal` is the wide axis: from
-/// path curvature for helices (radial flat face, PyMOL-style coil) and from the
+/// path curvature for helices (so the flat face points radially) and from the
 /// carbonyl direction for strands/loops.
 fn frames(sections: &[Section]) -> Vec<(V3, V3, V3)> {
     let n = sections.len();
