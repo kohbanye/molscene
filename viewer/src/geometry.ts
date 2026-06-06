@@ -18,12 +18,17 @@ export interface Cylinders {
   colors: Vec3[];
 }
 
-/** A triangle mesh with per-vertex normals and colors (cartoon today). */
-export interface Meshes {
+/**
+ * A triangle mesh with per-vertex normals and colors, drawn as one group with a
+ * single opacity (cartoon and surface each emit their own mesh).
+ */
+export interface Mesh {
   positions: Vec3[];
   normals: Vec3[];
   indices: number[];
   colors: Vec3[];
+  /** 1.0 = opaque; < 1.0 is drawn with depth-sorted transparency. */
+  opacity: number;
 }
 
 export interface GeomCamera {
@@ -34,9 +39,14 @@ export interface GeomCamera {
 export interface GeometrySpec {
   spheres: Spheres;
   cylinders: Cylinders;
-  meshes: Meshes;
+  meshes: Mesh[];
   camera: GeomCamera;
   background: Vec3;
+}
+
+/** Whether a mesh group needs the transparent (depth-sorted blend) path. */
+export function isTransparent(opacity: number): boolean {
+  return opacity < 1.0;
 }
 
 /** Flatten an array of Vec3 into a packed Float32Array for a BufferAttribute. */

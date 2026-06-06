@@ -10,6 +10,7 @@ import {
   flattenVec3,
   type GeometrySpec,
   type Instance,
+  isTransparent,
 } from "./geometry";
 
 function instancedMesh(
@@ -73,29 +74,36 @@ export function renderGeometry(
     );
   }
 
-  // Triangle meshes (cartoon). molscene tessellates these in Rust; we just draw
-  // the buffers with per-vertex colors.
-  const meshes = spec.meshes;
-  if (meshes && meshes.positions.length) {
+  // Triangle meshes (cartoon, surface). molscene tessellates these in Rust; we
+  // just draw the buffers with per-vertex colors. Each group has its own
+  // opacity, so a translucent surface can sit over an opaque cartoon — Three.js
+  // renders opaque objects first, then depth-sorts the transparent ones.
+  for (const mesh of spec.meshes ?? []) {
+    if (!mesh.positions.length) continue;
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute(
       "position",
-      new THREE.BufferAttribute(flattenVec3(meshes.positions), 3),
+      new THREE.BufferAttribute(flattenVec3(mesh.positions), 3),
     );
     geometry.setAttribute(
       "normal",
-      new THREE.BufferAttribute(flattenVec3(meshes.normals), 3),
+      new THREE.BufferAttribute(flattenVec3(mesh.normals), 3),
     );
     geometry.setAttribute(
       "color",
-      new THREE.BufferAttribute(flattenVec3(meshes.colors), 3),
+      new THREE.BufferAttribute(flattenVec3(mesh.colors), 3),
     );
-    geometry.setIndex(meshes.indices);
+    geometry.setIndex(mesh.indices);
+    const transparent = isTransparent(mesh.opacity);
     const material = new THREE.MeshStandardMaterial({
       vertexColors: true,
       roughness: 0.4,
       metalness: 0.0,
       side: THREE.DoubleSide,
+      transparent,
+      opacity: mesh.opacity,
+      // Don't occlude geometry behind a translucent surface with depth writes.
+      depthWrite: !transparent,
     });
     scene.add(new THREE.Mesh(geometry, material));
   }
