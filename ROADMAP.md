@@ -48,19 +48,27 @@ These constrain every milestone below:
 - **Coloring** (v0.3): property colormaps (`bfactor`/`occupancy` → viridis/plasma/
   rdylgn, auto-ranged), color-by-element-keeping-carbon (`element:cyan`), and
   explicit per-selection overrides via `scene.set_color(selection, color)`.
+- **Structured model** (architecture shift): the `Scene` is a pure in-memory model
+  (no `to_json`/`to_dict`, no serde on scene types) and selections are typed `Expr`
+  values built through the API — the string tokenizer/parser is gone. Only the
+  compiled `GeometrySpec` is serialized.
+- **Cartoon** (v0.4): native protein ribbons — Cα-geometric secondary-structure
+  assignment (preferring file `HELIX`/`SHEET` annotations), a Catmull-Rom backbone
+  spline extruded into helix ribbons, β-strand arrows, and loop tubes (a `meshes`
+  channel on `GeometrySpec`), with `color="secondary_structure"`/`"spectrum"`.
 
 ### Current limitations (these drive the milestones below)
 
-- **cartoon / surface** are recorded but **not drawn** yet.
+- **surface** is recorded but **not drawn** yet.
 - Bond inference is **O(n²)**; large structures will be slow.
 - Lighting is flat; single colors read muddy.
 - No benchmarks yet → no "fast" claims yet.
 
 ---
 
-## Architecture shift — structured model (next, in progress)
+## Architecture shift — structured model ✅ (shipped)
 
-A foundational refactor that lands before further feature milestones. It removes
+A foundational refactor that landed before the feature milestones. It removed
 two pieces of the original design that turned out to be the wrong defaults:
 
 1. **The serialized `Scene` spec.** The JSON scene spec was meant to be the
@@ -147,20 +155,28 @@ is `<base>[:<modifier>]` and `ColorScheme::parse` remains the single source of t
 **Deliverable:** `ms.load("1ubq").spheres("protein", color="bfactor")` and explicit
 per-selection colors (`.set_color("resi 50", "red")`) evaluate and render.
 
-## v0.4 — Cartoon (the hero representation)
+## v0.4 — Cartoon (the hero representation) ✅ (shipped)
 
 The iconic protein view, generated natively.
 
-- **Secondary-structure assignment** in Rust (DSSP-style H-bond/geometry).
-- **Backbone spline** (Catmull-Rom through Cα) + profile extrusion:
-  helix ribbon, sheet arrow, loop tube → triangle mesh.
-- Extend `GeometrySpec` with a **`meshes`** channel
+- **Secondary-structure assignment** in Rust: a Cα-only geometric heuristic
+  (P-SEA-style virtual angle/torsion + Cα(i±n) distances, smoothed), preferring
+  file `HELIX`/`SHEET` annotations when present (parsed from PDB; mmCIF falls back
+  to the heuristic).
+- **Backbone spline** (Catmull-Rom through Cα) + profile extrusion: helix ribbon,
+  β-strand arrow, loop tube as a single morphing elliptical cross-section →
+  triangle mesh with smooth vertex normals and end caps.
+- Extended `GeometrySpec` with a **`meshes`** channel
   (positions / normals / indices / per-vertex colors).
-- Three.js renderer draws meshes via `BufferGeometry`.
-- `color="secondary_structure"` and `color="spectrum"` along the chain.
+- Three.js renderer draws meshes via `BufferGeometry` (per-vertex colors).
+- `color="secondary_structure"` (helix/sheet/loop palette) and `color="spectrum"`
+  along the chain.
 
-**Deliverable:** `ms.load("1ubq").cartoon("protein", color="spectrum")` renders a
-real cartoon.
+**Deliverable:** `ms.load("1ubq").cartoon(ms.select.protein(), color="spectrum")`
+renders a real cartoon.
+
+Future polish (deferred): smoother profile transitions at SS boundaries, mmCIF
+`HELIX`/`SHEET` annotation parsing, and tunable cartoon dimensions.
 
 ## v0.5 — Surface
 
