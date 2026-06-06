@@ -27,6 +27,9 @@ pub enum ColorScheme {
     ElementCarbon(Rgb),
     /// Rainbow across residue order.
     Spectrum,
+    /// Color by per-residue secondary structure (cartoon only). Other
+    /// representations fall back to element coloring.
+    SecondaryStructure,
     /// Cycling palette per chain.
     Chain,
     /// A numeric per-atom property mapped through a colormap. `range` is the
@@ -72,6 +75,7 @@ impl ColorScheme {
                 },
             },
             "spectrum" | "rainbow" => ColorScheme::Spectrum,
+            "secondary_structure" | "ss" | "sse" => ColorScheme::SecondaryStructure,
             "chain" | "bychain" => ColorScheme::Chain,
             "bfactor" | "b" => ColorScheme::ByProperty {
                 field: PropertyField::BFactor,
@@ -319,6 +323,11 @@ mod tests {
     fn scheme_parsing() {
         assert_eq!(ColorScheme::parse("element"), ColorScheme::Element);
         assert_eq!(ColorScheme::parse("spectrum"), ColorScheme::Spectrum);
+        assert_eq!(
+            ColorScheme::parse("secondary_structure"),
+            ColorScheme::SecondaryStructure
+        );
+        assert_eq!(ColorScheme::parse("ss"), ColorScheme::SecondaryStructure);
         assert_eq!(ColorScheme::parse("chain"), ColorScheme::Chain);
         assert_eq!(
             ColorScheme::parse("red"),
