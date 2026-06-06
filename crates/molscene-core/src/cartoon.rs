@@ -81,12 +81,12 @@ pub fn ss_color(ss: Ss) -> Rgb {
 
 /// How to color cartoon vertices.
 pub struct CartoonParams<'a> {
-    /// The representation's resolved per-atom color (spectrum / element / fixed,
-    /// already including `set_color` overrides). The cartoon passes each
-    /// residue's Cα atom index/atom through this.
-    pub color_fn: &'a dyn Fn(usize, &Atom) -> Rgb,
-    /// When true (`color="secondary_structure"`), color by SS instead.
-    pub ss_coloring: bool,
+    /// Resolve a residue's color from its Cα atom index/atom and assigned
+    /// secondary structure. The caller encapsulates the full precedence
+    /// (explicit `set_color` override > `secondary_structure` palette > the
+    /// representation's base scheme), so the cartoon just supplies the SS it
+    /// computed and renders whatever color comes back.
+    pub color_fn: &'a dyn Fn(usize, &Atom, Ss) -> Rgb,
 }
 
 // -- backbone tracing -------------------------------------------------------
@@ -503,11 +503,7 @@ fn extrude_segment(
     let mut indices: Vec<u32> = Vec::new();
 
     let color_of = |s: &Section| -> Rgb {
-        if params.ss_coloring {
-            ss_color(s.ss)
-        } else {
-            (params.color_fn)(s.atom_index, &structure.atoms[s.atom_index])
-        }
+        (params.color_fn)(s.atom_index, &structure.atoms[s.atom_index], s.ss)
     };
 
     // Ring vertices.
@@ -757,10 +753,8 @@ mod tests {
     fn backbone_splits_on_gap() {
         // Residues 1,2,3 then 10,11 → two segments.
         let mut atoms = Vec::new();
-        let mut serial = 1;
-        for &seq in &[1, 2, 3, 10, 11] {
+        for (serial, &seq) in (1..).zip([1, 2, 3, 10, 11].iter()) {
             atoms.push(atom(serial, "CA", seq, seq as f32, 0.0, 0.0));
-            serial += 1;
         }
         let s = Structure::new(atoms);
         let segs = backbone_segments(&s, &all(&s));
@@ -769,18 +763,19 @@ mod tests {
         assert_eq!(segs[1].residues.len(), 2);
     }
 
-    fn grey(_: usize, _: &Atom) -> Rgb {
+    fn grey(_: usize, _: &Atom, _: Ss) -> Rgb {
         [0.5, 0.5, 0.5]
+    }
+
+    fn by_ss(_: usize, _: &Atom, ss: Ss) -> Rgb {
+        ss_color(ss)
     }
 
     #[test]
     fn mesh_is_non_empty_and_consistent() {
         let s = ideal_helix(12);
         let mut out = Meshes::default();
-        let params = CartoonParams {
-            color_fn: &grey,
-            ss_coloring: false,
-        };
+        let params = CartoonParams { color_fn: &grey };
         build_cartoon(&s, &all(&s), None, &params, &mut out);
         assert!(!out.positions.is_empty());
         assert_eq!(out.positions.len(), out.normals.len());
@@ -794,15 +789,12 @@ mod tests {
     fn ss_coloring_uses_palette_only() {
         let s = ideal_helix(12);
         let mut out = Meshes::default();
-        let params = CartoonParams {
-            color_fn: &grey,
-            ss_coloring: true,
-        };
+        let params = CartoonParams { color_fn: &by_ss };
         build_cartoon(&s, &all(&s), None, &params, &mut out);
         let palette = [ss_color(Ss::Helix), ss_color(Ss::Sheet), ss_color(Ss::Loop)];
         assert!(out.colors.iter().all(|c| palette.contains(c)));
-        // And not the grey from color_fn.
-        assert!(!out.colors.iter().any(|c| *c == [0.5, 0.5, 0.5]));
+        // And not the grey a non-SS color_fn would produce.
+        assert!(!out.colors.contains(&[0.5, 0.5, 0.5]));
     }
 
     #[test]
@@ -813,10 +805,7 @@ mod tests {
             atom(2, "C2", 1, 1.5, 0.0, 0.0),
         ]);
         let mut out = Meshes::default();
-        let params = CartoonParams {
-            color_fn: &grey,
-            ss_coloring: false,
-        };
+        let params = CartoonParams { color_fn: &grey };
         build_cartoon(&s, &all(&s), None, &params, &mut out);
         assert!(out.positions.is_empty());
     }

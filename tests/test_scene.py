@@ -68,9 +68,7 @@ def test_cartoon_emits_meshes():
 
 
 def test_cartoon_secondary_structure_coloring():
-    geom = (
-        ms.load(HELIX_FIXTURE).cartoon(ms.select.protein(), color="ss").to_geometry()
-    )
+    geom = ms.load(HELIX_FIXTURE).cartoon(ms.select.protein(), color="ss").to_geometry()
     colors = geom["meshes"]["colors"]
     assert len(colors) > 0
     # SS coloring uses only the helix/sheet/loop palette.

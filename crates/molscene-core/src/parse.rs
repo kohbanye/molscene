@@ -119,19 +119,23 @@ fn annotate_secondary_structure(text: &str, structure: &mut Structure) {
         if ic != ec {
             continue;
         }
-        let chain = ic.to_string();
+        // A blank chain ID maps to the empty-string chain key atoms use, so
+        // single-chain PDBs that leave the column blank still get annotated.
+        let chain = if ic.is_whitespace() {
+            String::new()
+        } else {
+            ic.to_string()
+        };
         for seq in is.min(es)..=is.max(es) {
             structure.set_ss(chain.clone(), seq, kind);
         }
     }
 }
 
-/// The non-space character at 0-indexed column `col`, if the line is long enough.
+/// The character at 0-indexed column `col`, if the line is long enough. May be a
+/// space (a blank chain ID) — the caller normalizes that to the empty chain key.
 fn col_char(line: &str, col: usize) -> Option<char> {
-    line.as_bytes()
-        .get(col)
-        .map(|&b| b as char)
-        .filter(|c| !c.is_whitespace())
+    line.as_bytes().get(col).map(|&b| b as char)
 }
 
 /// Parse the integer in the 0-indexed half-open column `range`, trimming spaces.
@@ -210,6 +214,30 @@ mod tests {
         assert_eq!(s.ss_at("A", 6), Some(Ss::Sheet));
         assert_eq!(s.ss_at("A", 7), Some(Ss::Sheet));
         assert_eq!(s.ss_at("A", 4), None); // gap between → Loop
+    }
+
+    #[test]
+    fn blank_chain_helix_annotates_empty_chain() {
+        // A HELIX record with a blank chain ID maps to the empty-string chain
+        // key, so single-chain PDBs that leave the column blank still annotate.
+        let mut helix = vec![b' '; 6];
+        helix[..6].copy_from_slice(b"HELIX ");
+        // Leave chain columns (20, 32) blank; only the sequence numbers are set.
+        put(&mut helix, 25, "1");
+        put(&mut helix, 37, "2");
+        // A CA atom (also blank chain) so pdbtbx has something to parse.
+        let mut atom =
+            b"ATOM      1  CA  ALA A   1      11.804   5.123   6.034  1.00 20.00           C"
+                .to_vec();
+        atom[21] = b' '; // blank the chain ID column
+        let text = format!(
+            "{}\n{}\n",
+            String::from_utf8(helix).unwrap(),
+            String::from_utf8(atom).unwrap(),
+        );
+        let s = parse_str(&text, InputFormat::Pdb).unwrap();
+        assert_eq!(s.ss_at("", 1), Some(Ss::Helix));
+        assert_eq!(s.ss_at("", 2), Some(Ss::Helix));
     }
 
     #[test]

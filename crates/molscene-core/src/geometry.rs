@@ -281,9 +281,22 @@ impl Scene {
                     }
                 }
                 RepresentationKind::Cartoon => {
+                    // Resolve per-residue color with full precedence: an explicit
+                    // `set_color` override wins, then the base scheme — where
+                    // `secondary_structure` maps the residue's assigned SS to the
+                    // cartoon palette (the only place SS is known).
+                    let cartoon_color = |i: usize, a: &Atom, ss: crate::structure::Ss| -> Rgb {
+                        match overrides.get(i).copied().flatten() {
+                            Some(ColorScheme::SecondaryStructure) => crate::cartoon::ss_color(ss),
+                            Some(ov) => ctx.color(ov, a),
+                            None => match base {
+                                ColorScheme::SecondaryStructure => crate::cartoon::ss_color(ss),
+                                other => ctx.color(other, a),
+                            },
+                        }
+                    };
                     let params = crate::cartoon::CartoonParams {
-                        color_fn: &color_at,
-                        ss_coloring: matches!(base, ColorScheme::SecondaryStructure),
+                        color_fn: &cartoon_color,
                     };
                     crate::cartoon::build_cartoon(
                         structure,
@@ -480,6 +493,21 @@ mod tests {
         assert!(!g.meshes.positions.is_empty());
         assert_eq!(g.meshes.positions.len(), g.meshes.colors.len());
         assert_eq!(g.meshes.indices.len() % 3, 0);
+    }
+
+    #[test]
+    fn cartoon_set_color_overrides_ss_coloring() {
+        // `set_color` must win over the cartoon's secondary-structure coloring
+        // for the overridden residue (and only that residue).
+        let mut scene = Scene::from_rcsb("test").with_structure(backbone(6));
+        scene
+            .cartoon(Expr::All, colored("secondary_structure"))
+            .set_color(Expr::resi(2, 2), "red");
+        let g = scene.to_geometry();
+        let red = [1.0, 0.0, 0.0];
+        assert!(g.meshes.colors.contains(&red), "override color must appear");
+        // Other residues keep an SS palette color, not red everywhere.
+        assert!(g.meshes.colors.iter().any(|c| *c != red));
     }
 
     #[test]
