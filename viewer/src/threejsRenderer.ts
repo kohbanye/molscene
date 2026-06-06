@@ -5,7 +5,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-import { buildInstances, type GeometrySpec, type Instance } from "./geometry";
+import {
+  buildInstances,
+  flattenVec3,
+  type GeometrySpec,
+  type Instance,
+} from "./geometry";
 
 function instancedMesh(
   base: THREE.BufferGeometry,
@@ -66,6 +71,33 @@ export function renderGeometry(
     scene.add(
       instancedMesh(new THREE.CylinderGeometry(1, 1, 1, 16), cylinders),
     );
+  }
+
+  // Triangle meshes (cartoon). molscene tessellates these in Rust; we just draw
+  // the buffers with per-vertex colors.
+  const meshes = spec.meshes;
+  if (meshes && meshes.positions.length) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(flattenVec3(meshes.positions), 3),
+    );
+    geometry.setAttribute(
+      "normal",
+      new THREE.BufferAttribute(flattenVec3(meshes.normals), 3),
+    );
+    geometry.setAttribute(
+      "color",
+      new THREE.BufferAttribute(flattenVec3(meshes.colors), 3),
+    );
+    geometry.setIndex(meshes.indices);
+    const material = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.4,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+    });
+    scene.add(new THREE.Mesh(geometry, material));
   }
 
   // Lighting.
