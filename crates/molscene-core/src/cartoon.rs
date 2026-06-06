@@ -26,8 +26,8 @@ const R_TUBE: f32 = 0.3;
 const RIBBON_HW: f32 = 0.95;
 const RIBBON_HT: f32 = 0.16;
 /// α-helix ribbon half-width and half-thickness.
-const HELIX_HW: f32 = 1.15;
-const HELIX_HT: f32 = 0.28;
+const HELIX_HW: f32 = 1.0;
+const HELIX_HT: f32 = 0.22;
 /// Cross-section flatness exponent: 2 → ellipse (loop tube), higher → flat
 /// ribbon faces with rounded edges (helix/sheet).
 const RIBBON_FLATNESS: f32 = 3.4;
@@ -37,10 +37,11 @@ const ARROW_BASE_HW: f32 = 1.55;
 const ARROW_TIP_HW: f32 = 0.02;
 const ARROW_SECTIONS: usize = SUBDIV * 3 / 2;
 /// Backbone path-smoothing iterations and how hard each SS class is pulled
-/// toward the local midpoint (helices/strands straighten into clean ribbons;
-/// loops keep close to the true trace).
+/// toward the local midpoint. Strands flatten and loops declutter; helices are
+/// left at full coil radius (their smoothness comes from the spline and frame
+/// passes, not from moving Cα).
 const SMOOTH_ITERS: usize = 2;
-const SMOOTH_HELIX: f32 = 0.6;
+const SMOOTH_HELIX: f32 = 0.0;
 const SMOOTH_SHEET: f32 = 0.6;
 const SMOOTH_LOOP: f32 = 0.2;
 
@@ -489,24 +490,9 @@ fn transport(prev: V3, t: V3) -> V3 {
     }
 }
 
-/// The ribbon's wide-axis direction from the local path curvature: the
-/// curvature points toward the helix axis, so the wide axis (perpendicular to
-/// it) wraps tangentially and the flat face looks radially outward. `None` if
-/// curvature is degenerate (a straight run).
-fn curvature_wide_axis(sections: &[Section], i: usize, tangent: V3) -> Option<V3> {
-    let n = sections.len();
-    let w = (SUBDIV / 2).max(1);
-    let a = sections[i.saturating_sub(w)].center;
-    let b = sections[(i + w).min(n - 1)].center;
-    let accel = sub(add(a, b), scale(sections[i].center, 2.0));
-    let radial = sub(accel, scale(tangent, dot(accel, tangent)));
-    (norm(radial) > 1e-4).then(|| normalize(cross(tangent, normalize(radial))))
-}
-
 /// Per-section orthonormal `(tangent, normal, binormal)` frames, with flip
-/// correction so the ribbon does not self-twist. `normal` is the wide axis: from
-/// path curvature for helices (so the flat face points radially) and from the
-/// carbonyl direction for strands/loops.
+/// correction so the ribbon does not self-twist. `normal` is the wide axis,
+/// taken from the carbonyl direction projected perpendicular to the tangent.
 fn frames(sections: &[Section]) -> Vec<(V3, V3, V3)> {
     let n = sections.len();
     let mut out = Vec::with_capacity(n);
@@ -518,14 +504,10 @@ fn frames(sections: &[Section]) -> Vec<(V3, V3, V3)> {
         if norm(tangent) < 1e-6 {
             tangent = [0.0, 0.0, 1.0];
         }
-        let wide_axis = if sections[i].ss == Ss::Helix {
-            curvature_wide_axis(sections, i, tangent)
-        } else {
-            sections[i].co.and_then(|co| {
-                let proj = sub(co, scale(tangent, dot(co, tangent)));
-                (norm(proj) > 1e-3).then(|| normalize(proj))
-            })
-        };
+        let wide_axis = sections[i].co.and_then(|co| {
+            let proj = sub(co, scale(tangent, dot(co, tangent)));
+            (norm(proj) > 1e-3).then(|| normalize(proj))
+        });
         let mut normal = match wide_axis {
             Some(nrm) => nrm,
             None => transport(prev_normal, tangent),
