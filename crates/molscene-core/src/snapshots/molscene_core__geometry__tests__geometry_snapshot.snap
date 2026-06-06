@@ -97,12 +97,7 @@ expression: scene.to_geometry()
       ]
     ]
   },
-  "meshes": {
-    "positions": [],
-    "normals": [],
-    "indices": [],
-    "colors": []
-  },
+  "meshes": [],
   "camera": {
     "center": [
       0.75,

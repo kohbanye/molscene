@@ -56,9 +56,12 @@ scene.show()/_repr_html_ # scene.py → _core.to_geometry_json()
 
 ### Current limitations to keep in mind
 
-`cartoon`/`surface` are recorded but not drawn (skipped with a warning). Bond inference
-is O(n²) (the selection k-d tree only covers spatial queries, not bond inference). These
-are tracked as milestones in `ROADMAP.md`.
+`cartoon` and `surface` are drawn natively now (surface is a grid-based approximate SES
+in `surface.rs`; `GeometrySpec.meshes` is a list of `Mesh` groups, each with its own
+`opacity` for depth-sorted transparency). Transparency covers mesh groups only —
+instanced spheres/sticks are still opaque. Bond inference is O(n²) (the selection k-d
+tree only covers spatial queries, not bond inference). These are tracked as milestones
+in `ROADMAP.md`.
 
 Selections are typed `Expr` values, not strings: `selection.rs` holds the `Expr` tree
 (boolean `and`/`or`/`not`, spatial `around`/`within`/`expand`/`beyond` via a `kiddo`

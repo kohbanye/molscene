@@ -60,20 +60,48 @@ def test_cartoon_emits_meshes():
         .cartoon(ms.select.protein(), color="spectrum")
         .to_geometry()
     )
-    pos = geom["meshes"]["positions"]
+    assert len(geom["meshes"]) == 1
+    mesh = geom["meshes"][0]
+    pos = mesh["positions"]
     assert len(pos) > 0
-    assert len(geom["meshes"]["colors"]) == len(pos)
-    assert len(geom["meshes"]["normals"]) == len(pos)
-    assert len(geom["meshes"]["indices"]) % 3 == 0
+    assert len(mesh["colors"]) == len(pos)
+    assert len(mesh["normals"]) == len(pos)
+    assert len(mesh["indices"]) % 3 == 0
+    assert mesh["opacity"] == 1.0
 
 
 def test_cartoon_secondary_structure_coloring():
     geom = ms.load(HELIX_FIXTURE).cartoon(ms.select.protein(), color="ss").to_geometry()
-    colors = geom["meshes"]["colors"]
+    colors = geom["meshes"][0]["colors"]
     assert len(colors) > 0
     # SS coloring uses only the helix/sheet/loop palette.
     palette = {(1.0, 0.0, 1.0), (1.0, 1.0, 0.0), (0.0, 1.0, 1.0)}
     assert all(tuple(c) in palette for c in colors)
+
+
+def test_surface_emits_a_transparent_mesh():
+    geom = ms.load(FIXTURE).surface(ms.select.protein(), opacity=0.3).to_geometry()
+    assert len(geom["meshes"]) >= 1
+    mesh = geom["meshes"][-1]
+    pos = mesh["positions"]
+    assert len(pos) > 0
+    assert len(mesh["colors"]) == len(pos)
+    assert len(mesh["normals"]) == len(pos)
+    assert len(mesh["indices"]) % 3 == 0
+    assert mesh["opacity"] == pytest.approx(0.3)
+
+
+def test_surface_over_cartoon_keeps_two_groups():
+    geom = (
+        ms.load(HELIX_FIXTURE)
+        .cartoon(ms.select.protein())
+        .surface(ms.select.protein(), opacity=0.3)
+        .to_geometry()
+    )
+    # One opaque cartoon group and one transparent surface group.
+    assert len(geom["meshes"]) == 2
+    assert geom["meshes"][0]["opacity"] == 1.0
+    assert geom["meshes"][1]["opacity"] == pytest.approx(0.3)
 
 
 def test_camera_is_bounding_sphere():

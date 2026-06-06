@@ -56,10 +56,15 @@ These constrain every milestone below:
   assignment (preferring file `HELIX`/`SHEET` annotations), a Catmull-Rom backbone
   spline extruded into helix ribbons, β-strand arrows, and loop tubes (a `meshes`
   channel on `GeometrySpec`), with `color="secondary_structure"`/`"spectrum"`.
+- **Surface** (v0.5): native molecular surface — a fast grid-based approximate
+  SES (accessible-solid rasterization + Felzenszwalb–Huttenlocher distance
+  transform + `fast-surface-nets`), nearest-atom vertex coloring, and depth-sorted
+  **mesh-group transparency** (`meshes` is a list of groups each with an `opacity`).
 
 ### Current limitations (these drive the milestones below)
 
-- **surface** is recorded but **not drawn** yet.
+- Transparency covers **mesh groups only** (surface / cartoon); instanced spheres
+  and sticks are still opaque (per-instance alpha is a follow-up).
 - Bond inference is **O(n²)**; large structures will be slow.
 - Lighting is flat; single colors read muddy.
 - No benchmarks yet → no "fast" claims yet.
@@ -178,14 +183,28 @@ renders a real cartoon.
 Future polish (deferred): smoother profile transitions at SS boundaries, mmCIF
 `HELIX`/`SHEET` annotation parsing, and tunable cartoon dimensions.
 
-## v0.5 — Surface
+## v0.5 — Surface ✅ (shipped)
 
-- Molecular **surface mesh** (SES / Gaussian) via a density grid +
-  marching cubes / surface-nets (Rust crate, e.g. `fast-surface-nets`).
-- **Transparency** in the renderer (depth-sorted / OIT-lite) for `opacity`.
-- Reuse the `meshes` channel from v0.4.
+- Molecular **surface mesh**: a fast grid-based **approximate SES**. Rasterize the
+  solvent-accessible solid onto a voxel grid, erode it by the probe radius via a
+  separable Felzenszwalb–Huttenlocher Euclidean distance transform (this is what
+  yields the concave re-entrant patches a per-sphere min-SDF cannot), and mesh the
+  isosurface with `fast-surface-nets`. Grid spacing is auto-coarsened under a cell
+  budget; vertices are colored by their nearest selected atom. `SurfaceParams`
+  stays a swappable seam for an analytic / Gaussian backend later.
+- **Mesh-group transparency** in the renderer (depth-sorted / OIT-lite): the
+  `meshes` channel is now a list of groups, each carrying its own `opacity`, drawn
+  with a transparent material (and `depthWrite` off) when `opacity < 1`. Surface
+  and cartoon each emit one group, so a translucent surface sits over an opaque
+  cartoon.
+- Reuses the `meshes` channel from v0.4.
 
 **Deliverable:** `surface("protein", opacity=0.3)` over a cartoon.
+
+Follow-up (deferred to a later PR): **per-representation opacity for spheres /
+sticks** via per-instance alpha (an instanced opacity attribute on the Three.js
+`InstancedMesh`). v0.5 ships transparency for **mesh groups only** (surface /
+cartoon); instanced primitives stay opaque.
 
 ## v0.6 — Chemistry & bond orders
 

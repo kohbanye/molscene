@@ -15,12 +15,14 @@ pub mod scene;
 pub mod selection;
 pub mod spec;
 pub mod structure;
+pub mod surface;
 
 #[cfg(feature = "parse")]
 pub mod parse;
 
-pub use geometry::{Cylinders, GeometrySpec, Meshes, Spheres};
+pub use geometry::{Cylinders, GeometrySpec, Mesh, Spheres};
 pub use scene::Scene;
 pub use selection::{evaluate, CmpOp, Expr, NumField};
 pub use spec::{Camera, Representation, RepresentationKind, Source, StructureEntry, Style};
 pub use structure::{covalent_radius, vdw_radius, Atom, Ss, Structure};
+pub use surface::SurfaceParams;

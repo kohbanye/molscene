@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildInstances,
   flattenVec3,
+  isTransparent,
   quaternionFromYTo,
   type GeometrySpec,
 } from "../src/geometry";
@@ -38,10 +39,17 @@ const SPEC: GeometrySpec = {
     radii: [0.25],
     colors: [[1, 0, 0]],
   },
-  meshes: { positions: [], normals: [], indices: [], colors: [] },
+  meshes: [],
   camera: { center: [0, 0, 0], radius: 5 },
   background: [1, 1, 1],
 };
+
+describe("isTransparent", () => {
+  it("treats opacity 1 as opaque and < 1 as transparent", () => {
+    expect(isTransparent(1.0)).toBe(false);
+    expect(isTransparent(0.3)).toBe(true);
+  });
+});
 
 describe("flattenVec3", () => {
   it("packs Vec3[] into a flat Float32Array", () => {

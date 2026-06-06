@@ -3,8 +3,8 @@
 //!
 //! This is the lower-level contract consumed by the molecule-agnostic renderer
 //! (Three.js today; wgpu later). It is pure compute — no pdbtbx, no rendering —
-//! so it is WASM-safe. v0.1 supports spheres + sticks; cartoon/surface are
-//! skipped with a warning until their native tessellation lands.
+//! so it is WASM-safe. Supports spheres, sticks, cartoon ribbons, and molecular
+//! surfaces (all tessellated natively).
 
 use std::collections::HashMap;
 
@@ -38,15 +38,30 @@ pub struct Cylinders {
     pub colors: Vec<Rgb>,
 }
 
-/// A triangle mesh with per-vertex normals and colors. Used by cartoon today
-/// (surface later). `indices` are triangle-list (groups of three) into the
-/// vertex arrays, which all share the same length.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct Meshes {
+/// A triangle mesh with per-vertex normals and colors, drawn as one group with
+/// a single `opacity` (cartoon and surface each emit their own `Mesh`).
+/// `indices` are triangle-list (groups of three) into the vertex arrays, which
+/// all share the same length.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Mesh {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub indices: Vec<u32>,
     pub colors: Vec<Rgb>,
+    /// 1.0 = opaque; < 1.0 is drawn with depth-sorted transparency.
+    pub opacity: f32,
+}
+
+impl Default for Mesh {
+    fn default() -> Self {
+        Self {
+            positions: Vec::new(),
+            normals: Vec::new(),
+            indices: Vec::new(),
+            colors: Vec::new(),
+            opacity: 1.0,
+        }
+    }
 }
 
 /// Camera framing as a bounding sphere the renderer fits to.
@@ -70,7 +85,7 @@ impl Default for GeomCamera {
 pub struct GeometrySpec {
     pub spheres: Spheres,
     pub cylinders: Cylinders,
-    pub meshes: Meshes,
+    pub meshes: Vec<Mesh>,
     pub camera: GeomCamera,
     pub background: Rgb,
 }
@@ -80,7 +95,7 @@ impl Default for GeometrySpec {
         Self {
             spheres: Spheres::default(),
             cylinders: Cylinders::default(),
-            meshes: Meshes::default(),
+            meshes: Vec::new(),
             camera: GeomCamera::default(),
             background: [1.0, 1.0, 1.0],
         }
@@ -298,18 +313,31 @@ impl Scene {
                     let params = crate::cartoon::CartoonParams {
                         color_fn: &cartoon_color,
                     };
+                    let mut mesh = crate::geometry::Mesh::default();
                     crate::cartoon::build_cartoon(
                         structure,
                         &indices,
                         rep.style.radius,
                         &params,
-                        &mut g.meshes,
+                        &mut mesh,
                     );
+                    if !mesh.positions.is_empty() {
+                        mesh.opacity = rep.style.opacity.unwrap_or(1.0);
+                        g.meshes.push(mesh);
+                    }
                 }
                 RepresentationKind::Surface => {
-                    eprintln!(
-                        "molscene: Surface is not yet supported by the native renderer; skipping.",
-                    );
+                    // Color each surface vertex by its nearest selected atom,
+                    // with the same `set_color`-override-then-base precedence as
+                    // the other representations.
+                    let surface_color = |i: usize, a: &Atom| color_at(i, a);
+                    let params = crate::surface::SurfaceParams {
+                        color_fn: &surface_color,
+                        probe: crate::surface::DEFAULT_PROBE,
+                        resolution: rep.style.radius,
+                        opacity: rep.style.opacity.unwrap_or(1.0),
+                    };
+                    crate::surface::build_surface(structure, &indices, &params, &mut g.meshes);
                 }
             }
         }
@@ -450,16 +478,36 @@ mod tests {
     }
 
     #[test]
-    fn cartoon_without_backbone_and_surface_emit_nothing() {
-        // The two-carbon fixture has no Cα backbone, so cartoon traces nothing;
-        // surface is still unsupported.
+    fn cartoon_without_backbone_emits_nothing() {
+        // The two-carbon fixture has no Cα backbone, so cartoon traces nothing
+        // and no mesh group is pushed.
         let mut scene = two_carbons();
         scene.cartoon(Expr::All, Style::default());
-        scene.surface(Expr::All, Style::default());
         let g = scene.to_geometry();
         assert!(g.spheres.centers.is_empty());
         assert!(g.cylinders.starts.is_empty());
-        assert!(g.meshes.positions.is_empty());
+        assert!(g.meshes.is_empty());
+    }
+
+    #[test]
+    fn surface_emits_a_mesh_group() {
+        let mut scene = two_carbons();
+        scene.surface(
+            Expr::All,
+            Style {
+                opacity: Some(0.3),
+                ..Default::default()
+            },
+        );
+        let g = scene.to_geometry();
+        assert_eq!(g.meshes.len(), 1);
+        let m = &g.meshes[0];
+        assert!(!m.positions.is_empty());
+        assert_eq!(m.positions.len(), m.normals.len());
+        assert_eq!(m.positions.len(), m.colors.len());
+        assert_eq!(m.indices.len() % 3, 0);
+        assert!(m.indices.iter().all(|&i| (i as usize) < m.positions.len()));
+        assert_eq!(m.opacity, 0.3);
     }
 
     /// A minimal protein backbone: `n` residues of N/CA/C/O laid out along x.
@@ -490,9 +538,11 @@ mod tests {
         let mut scene = scene;
         scene.cartoon(Expr::All, colored("spectrum"));
         let g = scene.to_geometry();
-        assert!(!g.meshes.positions.is_empty());
-        assert_eq!(g.meshes.positions.len(), g.meshes.colors.len());
-        assert_eq!(g.meshes.indices.len() % 3, 0);
+        assert_eq!(g.meshes.len(), 1);
+        let m = &g.meshes[0];
+        assert!(!m.positions.is_empty());
+        assert_eq!(m.positions.len(), m.colors.len());
+        assert_eq!(m.indices.len() % 3, 0);
     }
 
     #[test]
@@ -505,9 +555,10 @@ mod tests {
             .set_color(Expr::resi(2, 2), "red");
         let g = scene.to_geometry();
         let red = [1.0, 0.0, 0.0];
-        assert!(g.meshes.colors.contains(&red), "override color must appear");
+        let colors = &g.meshes[0].colors;
+        assert!(colors.contains(&red), "override color must appear");
         // Other residues keep an SS palette color, not red everywhere.
-        assert!(g.meshes.colors.iter().any(|c| *c != red));
+        assert!(colors.iter().any(|c| *c != red));
     }
 
     #[test]
