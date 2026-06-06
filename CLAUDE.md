@@ -40,12 +40,6 @@ scene.show()/_repr_html_ # scene.py → _core.to_geometry_json()
 
 ### Architectural invariants (read before changing things)
 
-> **In transition** — see ROADMAP "Architecture shift — structured model". The
-> serialized `Scene` spec and the textual selection parser are being removed in
-> favor of a code-as-source-of-truth model and typed `Expr` selections. The
-> invariants below describe that target; some code (string selections, `to_json`)
-> still reflects the previous model until the refactor lands.
-
 - **One serialized contract: `GeometrySpec`.** The in-memory `Scene` (built via the
   fluent API) compiles to a low-level renderer-neutral `GeometrySpec` (`to_geometry`).
   Only the `GeometrySpec` is serialized; the `Scene` itself has no wire format — the
@@ -71,8 +65,7 @@ Selections are typed `Expr` values, not strings: `selection.rs` holds the `Expr`
 k-d tree, aggregation `byres`/`bychain`/`bymol`, numeric `b`/`q`) and its evaluator.
 They are built and composed through the API (`ms.select` + `& | ~`), which constructs
 `Expr` nodes directly — there is no string parser, so an `Expr` is valid by
-construction. (Until the refactor lands, `ms.select` still builds a string the core
-parses; see the transition note above.)
+construction.
 
 ## Commands
 

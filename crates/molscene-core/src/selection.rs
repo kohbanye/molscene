@@ -22,10 +22,19 @@ use crate::structure::{Atom, Structure};
 
 const WATER_RESNAMES: [&str; 6] = ["HOH", "WAT", "H2O", "TIP3", "TIP", "SOL"];
 const BACKBONE_NAMES: [&str; 4] = ["N", "CA", "C", "O"];
+/// Standard DNA/RNA residue names (PDB), including the `D*` deoxy forms.
+const NUCLEIC_RESNAMES: [&str; 12] = [
+    "DA", "DC", "DG", "DT", "DU", "DI", "A", "C", "G", "U", "T", "I",
+];
 
 fn is_water(residue_name: &str) -> bool {
     let r = residue_name.trim().to_ascii_uppercase();
     WATER_RESNAMES.contains(&r.as_str())
+}
+
+fn is_nucleic(residue_name: &str) -> bool {
+    let r = residue_name.trim().to_ascii_uppercase();
+    NUCLEIC_RESNAMES.contains(&r.as_str())
 }
 
 fn is_backbone(name: &str) -> bool {
@@ -96,7 +105,8 @@ pub enum Expr {
     All,
     None,
     // Classification macros.
-    Protein, // protein | polymer | nucleic  (non-hetero)
+    Protein, // protein | polymer  (non-hetero)
+    Nucleic, // DNA/RNA by residue name (non-hetero)
     Hetero,  // hetero | hetatm
     Ligand,
     Water, // water | solvent
@@ -193,6 +203,7 @@ impl fmt::Display for Expr {
             Expr::All => write!(f, "all"),
             Expr::None => write!(f, "none"),
             Expr::Protein => write!(f, "protein"),
+            Expr::Nucleic => write!(f, "nucleic"),
             Expr::Hetero => write!(f, "hetero"),
             Expr::Ligand => write!(f, "ligand"),
             Expr::Water => write!(f, "water"),
@@ -273,6 +284,7 @@ fn eval(expr: &Expr, structure: &Structure, ctx: &EvalCtx) -> Vec<bool> {
         Expr::All => vec![true; atoms.len()],
         Expr::None => vec![false; atoms.len()],
         Expr::Protein => mask_from(&|a| !a.hetero),
+        Expr::Nucleic => mask_from(&|a| !a.hetero && is_nucleic(&a.residue_name)),
         Expr::Hetero => mask_from(&|a| a.hetero),
         Expr::Ligand => mask_from(&|a| a.hetero && !is_water(&a.residue_name)),
         Expr::Water => mask_from(&|a| is_water(&a.residue_name)),
@@ -470,6 +482,19 @@ mod tests {
         assert_eq!(evaluate(&s, &Expr::Backbone), vec![0, 1, 2]);
         // sidechain: non-hetero, non-backbone, non-hydrogen -> just CB.
         assert_eq!(evaluate(&s, &Expr::Sidechain), vec![3]);
+    }
+
+    #[test]
+    fn nucleic_by_residue_name() {
+        // One DNA residue (DA), one protein residue (ALA), one water — only the
+        // DA atoms are nucleic; protein() stays the broader non-hetero set.
+        let s = Structure::new(vec![
+            atom(0, "P", "P", "DA", 1, "A", false, 0.0, 1.0),
+            atom(1, "CA", "C", "ALA", 2, "A", false, 0.0, 1.0),
+            atom(2, "O", "O", "HOH", 101, "A", true, 0.0, 1.0),
+        ]);
+        assert_eq!(evaluate(&s, &Expr::Nucleic), vec![0]);
+        assert_eq!(evaluate(&s, &Expr::Protein), vec![0, 1]);
     }
 
     #[test]

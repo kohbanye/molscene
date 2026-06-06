@@ -118,3 +118,15 @@ def test_string_selection_is_rejected():
 def test_invalid_comparison_operator_raises():
     with pytest.raises(ValueError):
         ms.select.b("=>", 30)
+
+
+def test_invalid_radius_raises():
+    with pytest.raises(ValueError):
+        ms.select.around(ms.select.ligand(), -1)
+    with pytest.raises(ValueError):
+        ms.select.within(ms.select.ligand(), float("nan"))
+
+
+def test_nucleic_is_distinct_from_protein():
+    # nucleic is its own selection (was an alias for protein before).
+    assert str(ms.select.nucleic()) == "nucleic"

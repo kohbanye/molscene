@@ -133,8 +133,7 @@ impl Selection {
     }
     #[staticmethod]
     fn nucleic() -> Selection {
-        // The evaluator treats protein/polymer/nucleic alike (non-hetero) today.
-        Selection::of(Expr::Protein)
+        Selection::of(Expr::Nucleic)
     }
     #[staticmethod]
     fn ligand() -> Selection {
@@ -212,20 +211,20 @@ impl Selection {
 
     // -- spatial (radius in Å of an operand selection) ----------------------
     #[staticmethod]
-    fn around(sel: &Selection, radius: f64) -> Selection {
-        Selection::of(sel.expr.clone().around(radius))
+    fn around(sel: &Selection, radius: f64) -> PyResult<Selection> {
+        Ok(Selection::of(sel.expr.clone().around(radius_of(radius)?)))
     }
     #[staticmethod]
-    fn within(sel: &Selection, radius: f64) -> Selection {
-        Selection::of(sel.expr.clone().within(radius))
+    fn within(sel: &Selection, radius: f64) -> PyResult<Selection> {
+        Ok(Selection::of(sel.expr.clone().within(radius_of(radius)?)))
     }
     #[staticmethod]
-    fn expand(sel: &Selection, radius: f64) -> Selection {
-        Selection::of(sel.expr.clone().expand(radius))
+    fn expand(sel: &Selection, radius: f64) -> PyResult<Selection> {
+        Ok(Selection::of(sel.expr.clone().expand(radius_of(radius)?)))
     }
     #[staticmethod]
-    fn beyond(sel: &Selection, radius: f64) -> Selection {
-        Selection::of(sel.expr.clone().beyond(radius))
+    fn beyond(sel: &Selection, radius: f64) -> PyResult<Selection> {
+        Ok(Selection::of(sel.expr.clone().beyond(radius_of(radius)?)))
     }
 
     // -- boolean composition ------------------------------------------------
@@ -244,6 +243,17 @@ impl Selection {
     }
     fn __repr__(&self) -> String {
         format!("Selection({:?})", self.expr.to_string())
+    }
+}
+
+/// Validate a spatial radius (non-negative and finite), or raise `ValueError`.
+fn radius_of(radius: f64) -> PyResult<f64> {
+    if radius.is_finite() && radius >= 0.0 {
+        Ok(radius)
+    } else {
+        Err(PyValueError::new_err(
+            "radius must be a non-negative finite number",
+        ))
     }
 }
 
