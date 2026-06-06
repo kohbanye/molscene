@@ -22,9 +22,13 @@ const SUBDIV: usize = 10;
 const RING: usize = 16;
 /// Default loop tube radius (overridable via the representation's `radius`).
 const R_TUBE: f32 = 0.3;
-/// Ribbon half-width (helix/sheet body) and half-thickness.
+/// β-strand ribbon half-width and half-thickness.
 const RIBBON_HW: f32 = 0.95;
 const RIBBON_HT: f32 = 0.16;
+/// α-helix ribbon — wider and thicker than a strand so the coil reads as a
+/// proper flat ribbon rather than a thin twisted band.
+const HELIX_HW: f32 = 1.15;
+const HELIX_HT: f32 = 0.28;
 /// Cross-section flatness exponent: 2 → ellipse (loop tube), higher → flat
 /// ribbon faces with rounded edges (helix/sheet).
 const RIBBON_FLATNESS: f32 = 3.4;
@@ -369,7 +373,8 @@ struct Section {
 fn residue_profile(ss: Ss, radius: f32) -> (f32, f32, f32) {
     match ss {
         Ss::Loop => (radius, radius, 2.0),
-        Ss::Helix | Ss::Sheet => (RIBBON_HW, RIBBON_HT, RIBBON_FLATNESS),
+        Ss::Helix => (HELIX_HW, HELIX_HT, RIBBON_FLATNESS),
+        Ss::Sheet => (RIBBON_HW, RIBBON_HT, RIBBON_FLATNESS),
     }
 }
 
