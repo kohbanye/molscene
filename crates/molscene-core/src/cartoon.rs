@@ -17,17 +17,29 @@ use crate::structure::{Atom, Ss, Structure};
 // -- tunables ---------------------------------------------------------------
 
 /// Spline subdivisions between consecutive Cα atoms.
-const SUBDIV: usize = 8;
-/// Vertices around each elliptical cross-section.
-const RING: usize = 12;
+const SUBDIV: usize = 10;
+/// Vertices around each cross-section.
+const RING: usize = 16;
 /// Default loop tube radius (overridable via the representation's `radius`).
 const R_TUBE: f32 = 0.3;
 /// Ribbon half-width (helix/sheet body) and half-thickness.
-const RIBBON_HW: f32 = 0.9;
-const RIBBON_HT: f32 = 0.18;
-/// β-strand arrowhead: wide base tapering to a near-point at the C-terminus.
-const ARROW_BASE_HW: f32 = 1.4;
-const ARROW_TIP_HW: f32 = 0.05;
+const RIBBON_HW: f32 = 0.95;
+const RIBBON_HT: f32 = 0.16;
+/// Cross-section flatness exponent: 2 → ellipse (loop tube), higher → flat
+/// ribbon faces with rounded edges (helix/sheet).
+const RIBBON_FLATNESS: f32 = 3.4;
+/// β-strand arrowhead: a wide flared base tapering to a sharp tip, spanning the
+/// last ~1.5 residues of a strand run.
+const ARROW_BASE_HW: f32 = 1.55;
+const ARROW_TIP_HW: f32 = 0.02;
+const ARROW_SECTIONS: usize = SUBDIV * 3 / 2;
+/// Backbone path-smoothing iterations and how hard each SS class is pulled
+/// toward the local midpoint (helices/strands straighten into clean ribbons;
+/// loops keep close to the true trace).
+const SMOOTH_ITERS: usize = 2;
+const SMOOTH_HELIX: f32 = 0.6;
+const SMOOTH_SHEET: f32 = 0.6;
+const SMOOTH_LOOP: f32 = 0.2;
 
 // -- small vec3 helpers (no deps, WASM-safe) --------------------------------
 
@@ -347,20 +359,58 @@ struct Section {
     co: Option<V3>,
     half_w: f32,
     half_t: f32,
+    /// Superellipse exponent: 2 → round, higher → flat-faced ribbon.
+    flat: f32,
     ss: Ss,
     atom_index: usize,
 }
 
-fn residue_half_extents(ss: Ss, radius: f32) -> (f32, f32) {
+/// A residue's target cross-section: half-width, half-thickness, flatness.
+fn residue_profile(ss: Ss, radius: f32) -> (f32, f32, f32) {
     match ss {
-        Ss::Loop => (radius, radius),
-        Ss::Helix | Ss::Sheet => (RIBBON_HW, RIBBON_HT),
+        Ss::Loop => (radius, radius, 2.0),
+        Ss::Helix | Ss::Sheet => (RIBBON_HW, RIBBON_HT, RIBBON_FLATNESS),
     }
 }
 
-/// Whether residue `i` is the last residue of a β-strand run (arrow tip).
-fn is_arrow_tip(residues: &[ResidueTrace], i: usize) -> bool {
-    residues[i].ss == Ss::Sheet && (i + 1 == residues.len() || residues[i + 1].ss != Ss::Sheet)
+/// A point on the superellipse cross-section at angle `phi`, in the local
+/// `(normal, binormal)` plane. `flat = 2` is an ellipse; larger flattens the
+/// faces while keeping rounded edges.
+fn section_offset(half_w: f32, half_t: f32, flat: f32, phi: f32) -> (f32, f32) {
+    let e = 2.0 / flat;
+    let cx = phi.cos();
+    let cy = phi.sin();
+    let px = cx.signum() * cx.abs().powf(e);
+    let py = cy.signum() * cy.abs().powf(e);
+    (half_w * px, half_t * py)
+}
+
+/// Replace each β-strand run's last `ARROW_SECTIONS` cross-sections with an
+/// arrowhead: a flared base (the barb) tapering linearly to a sharp tip.
+fn apply_arrowheads(sections: &mut [Section]) {
+    let n = sections.len();
+    let mut i = 0;
+    while i < n {
+        if sections[i].ss != Ss::Sheet {
+            i += 1;
+            continue;
+        }
+        let mut j = i;
+        while j < n && sections[j].ss == Ss::Sheet {
+            j += 1;
+        }
+        let head = ARROW_SECTIONS.min(j - i);
+        let head_start = j - head;
+        for (k, s) in sections[head_start..j].iter_mut().enumerate() {
+            let t = if head <= 1 {
+                1.0
+            } else {
+                k as f32 / (head - 1) as f32
+            };
+            s.half_w = lerpf(ARROW_BASE_HW, ARROW_TIP_HW, t);
+        }
+        i = j;
+    }
 }
 
 /// Build the cross-section list for a segment.
@@ -375,10 +425,8 @@ fn sections_for(seg: &Segment, radius: f32) -> Vec<Section> {
     }
     let n = res.len();
     let co_of = |r: &ResidueTrace| -> Option<V3> { r.has_co.then_some(r.co) };
-    let extents: Vec<(f32, f32)> = res
-        .iter()
-        .map(|r| residue_half_extents(r.ss, radius))
-        .collect();
+    let profiles: Vec<(f32, f32, f32)> =
+        res.iter().map(|r| residue_profile(r.ss, radius)).collect();
 
     let mut sections = Vec::new();
     for i in 0..n - 1 {
@@ -386,18 +434,9 @@ fn sections_for(seg: &Segment, radius: f32) -> Vec<Section> {
         let p1 = res[i].ca;
         let p2 = res[i + 1].ca;
         let p3 = res[(i + 2).min(n - 1)].ca;
-        let arrow_span = is_arrow_tip(&res, i + 1);
         for j in 0..SUBDIV {
             let t = j as f32 / SUBDIV as f32;
             let nearest = if t < 0.5 { i } else { i + 1 };
-            let (half_w, half_t) = if arrow_span {
-                (lerpf(ARROW_BASE_HW, ARROW_TIP_HW, t), RIBBON_HT)
-            } else {
-                (
-                    lerpf(extents[i].0, extents[i + 1].0, t),
-                    lerpf(extents[i].1, extents[i + 1].1, t),
-                )
-            };
             let co = match (co_of(&res[i]), co_of(&res[i + 1])) {
                 (Some(a), Some(b)) => Some(normalize(lerp(a, b, t))),
                 (Some(a), None) => Some(a),
@@ -407,8 +446,9 @@ fn sections_for(seg: &Segment, radius: f32) -> Vec<Section> {
             sections.push(Section {
                 center: catmull_rom(p0, p1, p2, p3, t),
                 co,
-                half_w,
-                half_t,
+                half_w: lerpf(profiles[i].0, profiles[i + 1].0, t),
+                half_t: lerpf(profiles[i].1, profiles[i + 1].1, t),
+                flat: lerpf(profiles[i].2, profiles[i + 1].2, t),
                 ss: res[nearest].ss,
                 atom_index: res[nearest].atom_index,
             });
@@ -416,19 +456,16 @@ fn sections_for(seg: &Segment, radius: f32) -> Vec<Section> {
     }
     // Final endpoint at the last residue.
     let last = n - 1;
-    let (hw, ht) = if is_arrow_tip(&res, last) {
-        (ARROW_TIP_HW, RIBBON_HT)
-    } else {
-        extents[last]
-    };
     sections.push(Section {
         center: res[last].ca,
         co: co_of(&res[last]),
-        half_w: hw,
-        half_t: ht,
+        half_w: profiles[last].0,
+        half_t: profiles[last].1,
+        flat: profiles[last].2,
         ss: res[last].ss,
         atom_index: res[last].atom_index,
     });
+    apply_arrowheads(&mut sections);
     sections
 }
 
@@ -480,7 +517,28 @@ fn frames(sections: &[Section]) -> Vec<(V3, V3, V3)> {
         prev_normal = normal;
         out.push((tangent, normal, binormal));
     }
+    smooth_frames(&mut out);
     out
+}
+
+/// One pass of 1-2-1 smoothing on the frame normals (re-orthogonalized to each
+/// tangent), which evens out the per-residue twist so ribbons read cleanly.
+fn smooth_frames(frames: &mut [(V3, V3, V3)]) {
+    let n = frames.len();
+    if n < 3 {
+        return;
+    }
+    let normals: Vec<V3> = frames.iter().map(|f| f.1).collect();
+    for i in 1..n - 1 {
+        let (tangent, _, _) = frames[i];
+        let avg = add(add(normals[i - 1], scale(normals[i], 2.0)), normals[i + 1]);
+        let proj = sub(avg, scale(tangent, dot(avg, tangent)));
+        if norm(proj) > 1e-3 {
+            let normal = normalize(proj);
+            let binormal = normalize(cross(tangent, normal));
+            frames[i] = (tangent, normalize(cross(binormal, tangent)), binormal);
+        }
+    }
 }
 
 /// Extrude one segment into `out`, appending vertices/normals/colors/indices.
@@ -511,10 +569,8 @@ fn extrude_segment(
         let color = color_of(s);
         for k in 0..RING {
             let phi = std::f32::consts::TAU * (k as f32) / (RING as f32);
-            let local = add(
-                scale(normal, s.half_w * phi.cos()),
-                scale(binormal, s.half_t * phi.sin()),
-            );
+            let (ox, oy) = section_offset(s.half_w, s.half_t, s.flat, phi);
+            let local = add(scale(normal, ox), scale(binormal, oy));
             positions.push(add(s.center, local));
             colors.push(color);
         }
@@ -599,6 +655,44 @@ fn extrude_segment(
     out.indices.extend(indices.into_iter().map(|i| i + offset));
 }
 
+/// Laplacian-smooth a segment's Cα path (and carbonyl directions) toward the
+/// local midpoint, weighted by secondary structure. This straightens the
+/// per-residue zig-zag so helices read as clean spirals and strands as flat
+/// ribbons, while loops stay close to the true backbone. Endpoints are pinned.
+fn smooth_segment(seg: &mut Segment) {
+    let n = seg.residues.len();
+    if n < 3 {
+        return;
+    }
+    // Make carbonyl directions consistent before averaging (they alternate
+    // ~180° per residue, which would otherwise cancel).
+    for i in 1..n {
+        if seg.residues[i].has_co
+            && seg.residues[i - 1].has_co
+            && dot(seg.residues[i].co, seg.residues[i - 1].co) < 0.0
+        {
+            seg.residues[i].co = scale(seg.residues[i].co, -1.0);
+        }
+    }
+    for _ in 0..SMOOTH_ITERS {
+        let ca: Vec<V3> = seg.residues.iter().map(|r| r.ca).collect();
+        let co: Vec<V3> = seg.residues.iter().map(|r| r.co).collect();
+        for i in 1..n - 1 {
+            let w = match seg.residues[i].ss {
+                Ss::Helix => SMOOTH_HELIX,
+                Ss::Sheet => SMOOTH_SHEET,
+                Ss::Loop => SMOOTH_LOOP,
+            };
+            let mid = scale(add(ca[i - 1], ca[i + 1]), 0.5);
+            seg.residues[i].ca = lerp(ca[i], mid, w);
+            if seg.residues[i].has_co {
+                let cmid = scale(add(co[i - 1], co[i + 1]), 0.5);
+                seg.residues[i].co = normalize(lerp(co[i], cmid, 0.5));
+            }
+        }
+    }
+}
+
 /// Build cartoon meshes for `selected` atoms into `out`.
 pub fn build_cartoon(
     structure: &Structure,
@@ -611,6 +705,7 @@ pub fn build_cartoon(
     let mut segments = backbone_segments(structure, selected);
     for seg in &mut segments {
         assign_ss(structure, seg);
+        smooth_segment(seg);
         extrude_segment(structure, seg, radius, params, out);
     }
 }
