@@ -12,7 +12,7 @@ BFACTORS = os.path.join(os.path.dirname(__file__), "fixtures", "bfactors.pdb")
 
 
 def test_bfactor_coloring_spreads_a_gradient():
-    geom = ms.load(BFACTORS).spheres("all", color="bfactor").to_geometry()
+    geom = ms.load(BFACTORS).spheres(ms.select.all(), color="bfactor").to_geometry()
     colors = geom["spheres"]["colors"]
     assert len(colors) == 4
     # Auto-ranged over [10, 90]: the four atoms get four distinct colors,
@@ -23,14 +23,22 @@ def test_bfactor_coloring_spreads_a_gradient():
 
 def test_occupancy_colormap_keyword_is_accepted():
     # All occupancies are 1.0 -> degenerate range -> a single flat color.
-    geom = ms.load(BFACTORS).spheres("all", color="occupancy:plasma").to_geometry()
+    geom = (
+        ms.load(BFACTORS)
+        .spheres(ms.select.all(), color="occupancy:plasma")
+        .to_geometry()
+    )
     colors = geom["spheres"]["colors"]
     assert len(colors) == 4  # all atoms produced, not a partial/empty geometry
     assert len({tuple(c) for c in colors}) == 1
 
 
 def test_element_coloring_keeps_carbon_in_chosen_color():
-    geom = ms.load(DIPEPTIDE).spheres("protein", color="element:cyan").to_geometry()
+    geom = (
+        ms.load(DIPEPTIDE)
+        .spheres(ms.select.protein(), color="element:cyan")
+        .to_geometry()
+    )
     colors = [tuple(c) for c in geom["spheres"]["colors"]]
     cyan = (0.0, 1.0, 1.0)
     # Carbons are cyan; the backbone N/O atoms keep their CPK colors.
@@ -39,16 +47,12 @@ def test_element_coloring_keeps_carbon_in_chosen_color():
 
 
 def test_set_color_overrides_a_subselection():
-    scene = ms.load(DIPEPTIDE).spheres("all", color="grey")
-    assert scene.set_color("resn HOH", "red") is scene  # chains, returns self
+    scene = ms.load(DIPEPTIDE).spheres(ms.select.all(), color="grey")
+    # chains, returns self
+    assert scene.set_color(ms.select.resn("HOH"), "red") is scene
     geom = scene.to_geometry()
     colors = [tuple(c) for c in geom["spheres"]["colors"]]
     red = (1.0, 0.0, 0.0)
     grey = (0.5, 0.5, 0.5)
     assert red in colors  # the water atom was repainted
     assert grey in colors  # everything else stayed grey
-
-
-def test_set_color_is_recorded_in_the_scene_spec():
-    spec = ms.load(DIPEPTIDE).set_color("resi 1", "red").to_dict()
-    assert spec["colors"] == [{"selection": "resi 1", "color": "red"}]

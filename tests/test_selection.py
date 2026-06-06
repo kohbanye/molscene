@@ -1,5 +1,9 @@
 """Tests for the ``ms.select`` DSL, its Rust-backed boolean operators, and the
-native selection evaluator (boolean / spatial / aggregation / numeric)."""
+native selection evaluator (boolean / spatial / aggregation / numeric).
+
+Selections are typed values (no string parsing); ``str(selection)`` renders a
+readable debug form via the core's ``Display``.
+"""
 
 import os
 
@@ -14,7 +18,7 @@ def n_spheres(scene: ms.Scene) -> int:
     return len(scene.to_geometry()["spheres"]["centers"])
 
 
-# -- DSL string building ----------------------------------------------------
+# -- DSL debug rendering ----------------------------------------------------
 
 
 def test_basic_macros():
@@ -42,10 +46,11 @@ def test_aggregation_builders():
 
 
 def test_spatial_builders():
-    assert str(ms.select.around(ms.select.ligand(), 4.0)) == "around 4.0 of (ligand)"
-    assert str(ms.select.within(ms.select.ligand(), 4.0)) == "within 4.0 of (ligand)"
-    assert str(ms.select.expand(ms.select.ligand(), 4.0)) == "expand 4.0 of (ligand)"
-    assert str(ms.select.beyond(ms.select.ligand(), 4.0)) == "beyond 4.0 of (ligand)"
+    # The debug form renders radii with Rust's f64 Display (4.0 -> "4").
+    assert str(ms.select.around(ms.select.ligand(), 4)) == "around 4 of (ligand)"
+    assert str(ms.select.within(ms.select.ligand(), 4)) == "within 4 of (ligand)"
+    assert str(ms.select.expand(ms.select.ligand(), 4)) == "expand 4 of (ligand)"
+    assert str(ms.select.beyond(ms.select.ligand(), 4)) == "beyond 4 of (ligand)"
 
 
 def test_and_operator():
@@ -71,21 +76,15 @@ def test_composed_operators():
 # -- native evaluation (dipeptide: ALA 1, GLY 2, HOH 101; chain A; 10 atoms) --
 
 
-def test_selection_is_recorded_on_scene():
-    scene = ms.load(FIXTURE).sticks(ms.select.chain("A") & ms.select.ligand())
-    sel_str = scene.to_dict()["representations"][0]["selection"]
-    assert sel_str == "(chain A) and (ligand)"
-
-
 def test_single_clause_evaluates():
     # backbone: N/CA/C/O of ALA + GLY = 8 (CB excluded).
-    assert n_spheres(ms.load(FIXTURE).spheres("backbone")) == 8
+    assert n_spheres(ms.load(FIXTURE).spheres(ms.select.backbone())) == 8
     # water: the single HOH oxygen.
     assert n_spheres(ms.load(FIXTURE).spheres(ms.select.water())) == 1
 
 
-def test_composed_selection_is_evaluated_not_fallback():
-    # chain A & water -> just the water atom (was a fallback-to-all in v0.1).
+def test_composed_selection_is_evaluated():
+    # chain A & water -> just the water atom.
     sel = ms.select.chain("A") & ms.select.water()
     assert n_spheres(ms.load(FIXTURE).spheres(sel)) == 1
     # protein & ~water -> all 9 non-hetero atoms.
@@ -108,10 +107,26 @@ def test_numeric_evaluates():
 # -- validation -------------------------------------------------------------
 
 
-def test_invalid_selection_raises_value_error():
+def test_string_selection_is_rejected():
+    # Selections are ms.select values, never strings.
+    with pytest.raises(TypeError):
+        ms.load(FIXTURE).spheres("protein")
+    with pytest.raises(TypeError):
+        ms.load(FIXTURE).center("ligand")
+
+
+def test_invalid_comparison_operator_raises():
     with pytest.raises(ValueError):
-        ms.load(FIXTURE).spheres("frobnicate")
+        ms.select.b("=>", 30)
+
+
+def test_invalid_radius_raises():
     with pytest.raises(ValueError):
-        ms.load(FIXTURE).spheres("chain")  # missing argument
+        ms.select.around(ms.select.ligand(), -1)
     with pytest.raises(ValueError):
-        ms.load(FIXTURE).center("around 5 (ligand)")  # missing "of"
+        ms.select.within(ms.select.ligand(), float("nan"))
+
+
+def test_nucleic_is_distinct_from_protein():
+    # nucleic is its own selection (was an alias for protein before).
+    assert str(ms.select.nucleic()) == "nucleic"

@@ -1,13 +1,9 @@
 """The ``ms.select`` selection DSL.
 
-Selections wrap a selection string; the boolean operators ``&`` / ``|`` / ``~``
-compose them, backed by the Rust ``_core.Selection`` type. The core parses the
-string into an expression tree and evaluates it natively — boolean composition,
-spatial operators (``around`` / ``within`` / ``expand`` / ``beyond``),
-aggregation (``byres`` / ``bychain`` / ``bymol``) and numeric ``b`` / ``q``
-predicates. Invalid selections raise ``ValueError`` when added to a scene.
-
-Anything that takes a selection also accepts a plain string.
+Selections are typed values backed by the Rust ``_core.Selection`` (an ``Expr``
+tree), built through these constructors and composed with the boolean operators
+``&`` / ``|`` / ``~``. There is no selection string to parse — a selection is
+valid by construction.
 """
 
 from __future__ import annotations
@@ -18,89 +14,83 @@ from . import _core
 # operators (__and__/__or__/__invert__) come from the core.
 Selection = _core.Selection
 
-SelectionLike = "Selection | str"
-
-
-def _wrap(value: str) -> Selection:
-    return Selection(value)
-
 
 class _Select:
     """Namespace of selection constructors, exposed as ``molscene.select``."""
 
     # Zero-argument macros.
     def all(self) -> Selection:
-        return _wrap("all")
+        return _core.Selection.all()
 
     def none(self) -> Selection:
-        return _wrap("none")
+        return _core.Selection.none()
 
     def protein(self) -> Selection:
-        return _wrap("protein")
+        return _core.Selection.protein()
 
     def nucleic(self) -> Selection:
-        return _wrap("nucleic")
+        return _core.Selection.nucleic()
 
     def ligand(self) -> Selection:
-        return _wrap("ligand")
+        return _core.Selection.ligand()
 
     def water(self) -> Selection:
-        return _wrap("water")
+        return _core.Selection.water()
 
     def hetero(self) -> Selection:
-        return _wrap("hetero")
+        return _core.Selection.hetero()
 
     def backbone(self) -> Selection:
-        return _wrap("backbone")
+        return _core.Selection.backbone()
 
     def sidechain(self) -> Selection:
-        return _wrap("sidechain")
+        return _core.Selection.sidechain()
 
     def hydrogen(self) -> Selection:
-        return _wrap("hydrogen")
+        return _core.Selection.hydrogen()
 
     # One-argument predicates.
     def chain(self, chain_id: str) -> Selection:
-        return _wrap(f"chain {chain_id}")
+        return _core.Selection.chain(chain_id)
 
     def resn(self, name: str) -> Selection:
-        return _wrap(f"resn {name}")
+        return _core.Selection.resn(name)
 
     def resi(self, start: int, end: int | None = None) -> Selection:
-        return _wrap(f"resi {start}-{end}" if end is not None else f"resi {start}")
+        return _core.Selection.resi(start, end)
 
     def element(self, symbol: str) -> Selection:
-        return _wrap(f"element {symbol}")
+        return _core.Selection.element(symbol)
 
     # Numeric predicates: b-factor / occupancy comparisons.
     def b(self, op: str, value: float) -> Selection:
-        return _wrap(f"b {op} {value}")
+        return _core.Selection.b(op, value)
 
     def q(self, op: str, value: float) -> Selection:
-        return _wrap(f"q {op} {value}")
+        return _core.Selection.q(op, value)
 
     # Spatial operators (radius in Å of an operand selection).
-    def around(self, selection: SelectionLike, radius: float) -> Selection:
-        return _wrap(f"around {radius} of ({selection})")
+    def around(self, selection: Selection, radius: float) -> Selection:
+        return _core.Selection.around(selection, radius)
 
-    def within(self, selection: SelectionLike, radius: float) -> Selection:
-        return _wrap(f"within {radius} of ({selection})")
+    def within(self, selection: Selection, radius: float) -> Selection:
+        return _core.Selection.within(selection, radius)
 
-    def expand(self, selection: SelectionLike, radius: float) -> Selection:
-        return _wrap(f"expand {radius} of ({selection})")
+    def expand(self, selection: Selection, radius: float) -> Selection:
+        return _core.Selection.expand(selection, radius)
 
-    def beyond(self, selection: SelectionLike, radius: float) -> Selection:
-        return _wrap(f"beyond {radius} of ({selection})")
+    def beyond(self, selection: Selection, radius: float) -> Selection:
+        return _core.Selection.beyond(selection, radius)
 
     # Aggregation: expand to whole residue / chain / bonded molecule.
-    def byres(self, selection: SelectionLike) -> Selection:
-        return _wrap(f"byres ({selection})")
+    def byres(self, selection: Selection) -> Selection:
+        return _core.Selection.byres(selection)
 
-    def bychain(self, selection: SelectionLike) -> Selection:
-        return _wrap(f"bychain ({selection})")
+    def bychain(self, selection: Selection) -> Selection:
+        return _core.Selection.bychain(selection)
 
-    def bymol(self, selection: SelectionLike) -> Selection:
-        return _wrap(f"bymol ({selection})")
+    def bymol(self, selection: Selection) -> Selection:
+        return _core.Selection.bymol(selection)
 
 
 #: The selection DSL namespace.

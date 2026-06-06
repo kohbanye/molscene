@@ -6,9 +6,9 @@ Example::
 
     scene = (
         ms.load("1ubq")
-        .cartoon("protein", color="spectrum")
-        .surface("protein", opacity=0.25)
-        .sticks("ligand", color="element")
+        .cartoon(ms.select.protein(), color="spectrum")
+        .surface(ms.select.protein(), opacity=0.25)
+        .sticks(ms.select.ligand(), color="element")
     )
     scene.show()
 """

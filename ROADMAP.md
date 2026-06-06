@@ -11,13 +11,19 @@ These constrain every milestone below:
   generation, and color resolution live in `molscene-core`. The renderer is a
   dumb 3D canvas (Three.js today) that knows nothing about molecules.
 - **Scenes are declarative.** You describe *what* to show; molscene compiles it.
-  No imperative `cmd.show(...)` clone — state lives in a `Scene` an AI can
-  generate and a human can edit.
-- **Two specs.** A high-level declarative `Scene` (serde JSON) compiles to a
-  low-level renderer-neutral `GeometrySpec` (instanced primitives + meshes).
-- **Dual-core.** `geometry`/`color`/`selection` are pure compute and WASM-safe;
-  only `parse` (pdbtbx) is native-gated. A pure-browser/WASM product is a real
-  goal, not a someday.
+  No imperative `cmd.show(...)` clone — state lives in an in-memory `Scene` built
+  through a typed, composable API. The *building code* is the source of truth;
+  there is no serialized scene format to hand-edit or round-trip.
+- **Structured selections.** Selections are typed `Expr` values, built and
+  composed through the API (`ms.select` + `& | ~`) — not a query string to parse.
+  An `Expr` is valid by construction; there is no textual selection language.
+- **One serialized contract.** The `Scene` compiles to a low-level,
+  renderer-neutral `GeometrySpec` (instanced primitives + meshes). The
+  `GeometrySpec` is the *only* wire format — the `Scene` itself is never serialized.
+- **Dual-core.** `geometry`/`color`/`selection`/`scene` are pure compute and
+  WASM-safe; only `parse` (pdbtbx) is native-gated. A pure-browser/WASM product is
+  a real goal: the same Rust core builds the `Scene` and emits a `GeometrySpec`
+  from JS via wasm-bindgen — no Python, and still no Scene wire format.
 - **TDD, every layer.** `cargo test` (incl. insta snapshots), `vitest`, `pytest`
   stay green; the geometry pipeline is the main test surface.
 
@@ -49,6 +55,57 @@ These constrain every milestone below:
 - Bond inference is **O(n²)**; large structures will be slow.
 - Lighting is flat; single colors read muddy.
 - No benchmarks yet → no "fast" claims yet.
+
+---
+
+## Architecture shift — structured model (next, in progress)
+
+A foundational refactor that lands before further feature milestones. It removes
+two pieces of the original design that turned out to be the wrong defaults:
+
+1. **The serialized `Scene` spec.** The JSON scene spec was meant to be the
+   hand-editable / cross-frontend contract, but in practice only the compiled
+   `GeometrySpec` ever reaches a renderer, and the building code is what people
+   actually read and edit. So the `Scene` becomes a pure in-memory model: **no
+   `to_json` / `to_dict`, no serde on the scene types**. The fluent API call site
+   is the source of truth; only the `GeometrySpec` is serialized (it still has to
+   cross to the JS viewer).
+2. **The textual selection language.** Selections become typed `Expr` values,
+   built and composed through the API. The tokenizer + recursive-descent parser
+   in `selection.rs` is **deleted**; an `Expr` is valid by construction, so a
+   selection can no longer fail to parse.
+
+Color values stay strings (`"bfactor"`, `"element:cyan"`) — that grammar is small
+and unaffected; only *selections* and the *Scene serialization* change.
+
+### Plan (by layer)
+
+- **core / `selection.rs`** — keep `Expr` + the evaluator; delete the
+  tokenizer/parser. Add `Expr` constructors/combinators (`Expr::chain`,
+  `Expr::resi`, `.and`/`.or`/`.not`, `around`/`byres`/…). Keep a `Display` impl
+  for debugging/error messages only (not a canonical form).
+- **core / `scene.rs` + `spec.rs`** — drop `Serialize`/`Deserialize` and
+  `to_json` / `to_json_pretty` / `to_value`. `Representation.selection`,
+  `ColorAssignment.selection`, and `Camera.center` change from `String` to `Expr`.
+  Replace the `serde_json::Map` `Style` with a typed struct (color stays a string
+  parsed to `ColorScheme`; opacity/scale/radius typed). Drop `spec_version` and
+  the "wire format" framing.
+- **core / `geometry.rs`** — `evaluate(structure, &Expr)` instead of `&str`; no
+  other change (`GeometrySpec` keeps its serde — it is the wire format).
+- **bindings / `molscene-py`** — `Selection` wraps a Rust `Expr` (not a `String`);
+  the `ms.select` builders and `& | ~` construct `Expr` in Rust. Remove
+  `validate_selection` and `Scene::to_json`; keep `to_geometry_json`.
+- **facade / `python/molscene`** — `ms.select.*` build `Expr`-backed `Selection`s;
+  remove `_wrap` / string parsing. Representations and `set_color` take a
+  `Selection` (no bare strings). Remove `Scene.to_json` / `to_dict`; keep
+  `to_geometry`. Default selections (`"protein"`, `"all"`, …) become
+  `ms.select.protein()` etc.
+- **tests / examples** — remove the scene-JSON snapshot and parser tests; add
+  `Expr`-builder + evaluator tests. Migrate the notebook / README / tests off
+  string selections. The geometry snapshot stays.
+
+This is a breaking API change (string selections and `to_json` / `to_dict` go
+away); it predates the 1.0 surface freeze, so we take it now.
 
 ---
 
@@ -145,10 +202,11 @@ sticks, as is conventional.)
 
 Prove the dual-core thesis.
 
-- Flesh out `molscene-wasm` (wasm-bindgen): build a `Scene` and run
-  `to_geometry` entirely in the browser, no Python.
+- Flesh out `molscene-wasm` (wasm-bindgen): build a `Scene` through the same typed
+  API and run `to_geometry` entirely in the browser, no Python.
 - A **web demo page** consuming the WASM core + the existing `viewer/` renderer.
-- Same `GeometrySpec` contract drives both Python-notebook and pure-web paths.
+- Same `GeometrySpec` contract drives both Python-notebook and pure-web paths — and
+  it remains the *only* serialized format on either path.
 
 **Deliverable:** a browser page where JS builds a scene and renders it — zero
 Python.
@@ -176,6 +234,7 @@ Python.
 
 ## Non-goals (for now)
 
-- Full PyMOL command/selection-language compatibility.
-- Ray tracing / publication-grade offline rendering.
+- A textual selection language. Selections are a typed, composable API, not a
+  query string molscene parses — so no PyMOL-style selection-string compatibility,
+  and no imperative command language.
 - A GUI, measurement tools, or a plugin system.

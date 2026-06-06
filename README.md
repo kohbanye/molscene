@@ -9,8 +9,8 @@ import molscene as ms
 
 scene = (
     ms.load("1ubq")
-    .sticks("protein", color="spectrum")
-    .spheres("hetero", color="element")
+    .sticks(ms.select.protein(), color="spectrum")
+    .spheres(ms.select.hetero(), color="element")
 )
 scene.show()   # interactive 3D in Jupyter / Colab
 ```
@@ -57,7 +57,7 @@ maturin develop && pytest -m "not network"
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md). Today molscene renders **spheres** and **sticks**
-natively and evaluates a **full selection language** (boolean, spatial,
+natively and evaluates a **typed, composable selection API** (boolean, spatial,
 aggregation, numeric) in Rust; cartoon, surface, and a pure-web WASM path are next.
 
 ## License

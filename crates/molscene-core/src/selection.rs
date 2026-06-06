@@ -1,17 +1,20 @@
-//! Selection evaluation.
+//! Selection as a typed expression tree.
 //!
-//! A selection is a human-readable string (so a `Scene` stays AI-generatable and
-//! hand-editable). This module compiles it to an expression tree ([`Expr`]) and
-//! evaluates that tree against a [`Structure`] into atom indices.
+//! A selection is an [`Expr`] value — built and composed through the API, never
+//! parsed from a string. This module owns the tree and its evaluator, which
+//! resolves an `Expr` against a [`Structure`] into atom indices.
 //!
-//! The language has boolean composition (`and` / `or` / `not`, grouped with
-//! parens), spatial operators (`around` / `within` / `expand` / `beyond … of`,
-//! backed by a k-d tree), aggregation (`byres` / `bychain` / `bymol`), numeric
-//! predicates (`b` / `q` comparisons), plus the classification macros and
-//! single-clause predicates (`chain`, `resn`, `element`, `resi`, …).
+//! The tree has boolean composition (`and` / `or` / `not`), spatial operators
+//! (`around` / `within` / `expand` / `beyond`, backed by a k-d tree), aggregation
+//! (`byres` / `bychain` / `bymol`), numeric predicates (`b` / `q` comparisons),
+//! plus the classification macros and single-clause predicates (`chain`, `resn`,
+//! `element`, `resi`, …). Build it with [`Expr`]'s constructors and combinators
+//! (`Expr::chain("A").and(Expr::Protein)`); a `Display` impl renders a readable
+//! form for debugging only (it is not a canonical, re-parseable representation).
 
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::fmt;
 
 use kiddo::{KdTree, SquaredEuclidean};
 
@@ -19,10 +22,19 @@ use crate::structure::{Atom, Structure};
 
 const WATER_RESNAMES: [&str; 6] = ["HOH", "WAT", "H2O", "TIP3", "TIP", "SOL"];
 const BACKBONE_NAMES: [&str; 4] = ["N", "CA", "C", "O"];
+/// Standard DNA/RNA residue names (PDB), including the `D*` deoxy forms.
+const NUCLEIC_RESNAMES: [&str; 12] = [
+    "DA", "DC", "DG", "DT", "DU", "DI", "A", "C", "G", "U", "T", "I",
+];
 
 fn is_water(residue_name: &str) -> bool {
     let r = residue_name.trim().to_ascii_uppercase();
     WATER_RESNAMES.contains(&r.as_str())
+}
+
+fn is_nucleic(residue_name: &str) -> bool {
+    let r = residue_name.trim().to_ascii_uppercase();
+    NUCLEIC_RESNAMES.contains(&r.as_str())
 }
 
 fn is_backbone(name: &str) -> bool {
@@ -60,15 +72,41 @@ impl CmpOp {
             CmpOp::Ne => lhs != rhs,
         }
     }
+
+    /// Parse a comparison operator (`<`, `<=`, `>`, `>=`, `=`/`==`, `!=`).
+    pub fn parse(s: &str) -> Option<CmpOp> {
+        Some(match s.trim() {
+            "<" => CmpOp::Lt,
+            "<=" => CmpOp::Le,
+            ">" => CmpOp::Gt,
+            ">=" => CmpOp::Ge,
+            "=" | "==" => CmpOp::Eq,
+            "!=" => CmpOp::Ne,
+            _ => return None,
+        })
+    }
+
+    fn symbol(self) -> &'static str {
+        match self {
+            CmpOp::Lt => "<",
+            CmpOp::Le => "<=",
+            CmpOp::Gt => ">",
+            CmpOp::Ge => ">=",
+            CmpOp::Eq => "=",
+            CmpOp::Ne => "!=",
+        }
+    }
 }
 
-/// A parsed selection expression tree.
+/// A selection expression tree. Build it with the constructors and combinators
+/// below, or the bare unit variants (`Expr::Protein`, `Expr::All`, …).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     All,
     None,
     // Classification macros.
-    Protein, // protein | polymer | nucleic  (non-hetero)
+    Protein, // protein | polymer  (non-hetero)
+    Nucleic, // DNA/RNA by residue name (non-hetero)
     Hetero,  // hetero | hetatm
     Ligand,
     Water, // water | solvent
@@ -100,345 +138,101 @@ pub enum Expr {
     Beyond(f64, Box<Expr>),
 }
 
-/// An error produced while parsing a selection string.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ParseError {
-    /// Reached the end of input while more was expected.
-    UnexpectedEnd { expected: &'static str },
-    /// Found a token where a different one was expected.
-    Expected {
-        expected: &'static str,
-        found: String,
-    },
-    /// A keyword that isn't part of the language.
-    UnknownKeyword(String),
-    /// A number that didn't parse.
-    BadNumber(String),
-    /// A spatial radius that was negative.
-    NegativeRadius(f64),
-    /// A `resi` range that didn't parse.
-    BadRange(String),
-    /// Leftover tokens after a complete expression.
-    TrailingInput(String),
+impl Expr {
+    // Single-clause predicate constructors.
+    pub fn chain(id: impl Into<String>) -> Expr {
+        Expr::Chain(id.into())
+    }
+    pub fn resn(name: impl Into<String>) -> Expr {
+        Expr::ResName(name.into())
+    }
+    pub fn element(symbol: impl Into<String>) -> Expr {
+        Expr::Element(symbol.into())
+    }
+    /// Inclusive residue-number range `[lo, hi]` (use `lo == hi` for one residue).
+    pub fn resi(lo: i32, hi: i32) -> Expr {
+        Expr::ResId(lo, hi)
+    }
+    pub fn numeric(field: NumField, op: CmpOp, value: f64) -> Expr {
+        Expr::Numeric { field, op, value }
+    }
+
+    // Boolean / aggregation / spatial combinators.
+    pub fn and(self, other: Expr) -> Expr {
+        Expr::And(Box::new(self), Box::new(other))
+    }
+    pub fn or(self, other: Expr) -> Expr {
+        Expr::Or(Box::new(self), Box::new(other))
+    }
+    #[allow(clippy::should_implement_trait)]
+    pub fn not(self) -> Expr {
+        Expr::Not(Box::new(self))
+    }
+    pub fn byres(self) -> Expr {
+        Expr::ByRes(Box::new(self))
+    }
+    pub fn bychain(self) -> Expr {
+        Expr::ByChain(Box::new(self))
+    }
+    pub fn bymol(self) -> Expr {
+        Expr::ByMol(Box::new(self))
+    }
+    /// Atoms within `radius` Å of `self`, excluding `self` (a shell).
+    pub fn around(self, radius: f64) -> Expr {
+        Expr::Around(radius, Box::new(self))
+    }
+    /// Atoms within `radius` Å of `self`, `self` included.
+    pub fn within(self, radius: f64) -> Expr {
+        Expr::Within(radius, Box::new(self))
+    }
+    /// `self` grown by `radius` Å (alias of `within` today).
+    pub fn expand(self, radius: f64) -> Expr {
+        Expr::Expand(radius, Box::new(self))
+    }
+    /// Atoms farther than `radius` Å from `self`.
+    pub fn beyond(self, radius: f64) -> Expr {
+        Expr::Beyond(radius, Box::new(self))
+    }
 }
 
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+/// A readable rendering for debugging / error messages. **Not** a canonical or
+/// re-parseable form — selections are values, not strings.
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ParseError::UnexpectedEnd { expected } => {
-                write!(f, "unexpected end of selection; expected {expected}")
-            }
-            ParseError::Expected { expected, found } => {
-                write!(f, "expected {expected}, found {found:?}")
-            }
-            ParseError::UnknownKeyword(k) => write!(f, "unknown selection keyword {k:?}"),
-            ParseError::BadNumber(s) => write!(f, "invalid number {s:?}"),
-            ParseError::NegativeRadius(r) => write!(f, "spatial radius must be >= 0, got {r}"),
-            ParseError::BadRange(s) => write!(f, "invalid resi range {s:?}"),
-            ParseError::TrailingInput(s) => {
-                write!(f, "unexpected trailing input starting at {s:?}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ParseError {}
-
-// ---------------------------------------------------------------------------
-// Tokenizer
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, PartialEq)]
-enum Token {
-    /// A bareword: keywords and predicate arguments (`chain`, `A`, `10-30`, `4.0`).
-    Ident(String),
-    LParen,
-    RParen,
-    Cmp(CmpOp),
-}
-
-fn tokenize(input: &str) -> Vec<Token> {
-    let mut tokens = Vec::new();
-    let bytes = input.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        let c = bytes[i] as char;
-        match c {
-            c if c.is_whitespace() => i += 1,
-            '(' => {
-                tokens.push(Token::LParen);
-                i += 1;
-            }
-            ')' => {
-                tokens.push(Token::RParen);
-                i += 1;
-            }
-            '&' => {
-                tokens.push(Token::Ident("and".into()));
-                i += 1;
-            }
-            '|' => {
-                tokens.push(Token::Ident("or".into()));
-                i += 1;
-            }
-            '<' | '>' | '=' | '!' => {
-                let next = bytes.get(i + 1).map(|b| *b as char);
-                let (op, len) = match (c, next) {
-                    ('<', Some('=')) => (CmpOp::Le, 2),
-                    ('<', _) => (CmpOp::Lt, 1),
-                    ('>', Some('=')) => (CmpOp::Ge, 2),
-                    ('>', _) => (CmpOp::Gt, 1),
-                    ('=', Some('=')) => (CmpOp::Eq, 2),
-                    ('=', _) => (CmpOp::Eq, 1),
-                    ('!', Some('=')) => (CmpOp::Ne, 2),
-                    // bare `!` is a `not` alias.
-                    ('!', _) => {
-                        tokens.push(Token::Ident("not".into()));
-                        i += 1;
-                        continue;
-                    }
-                    _ => unreachable!(),
+            Expr::All => write!(f, "all"),
+            Expr::None => write!(f, "none"),
+            Expr::Protein => write!(f, "protein"),
+            Expr::Nucleic => write!(f, "nucleic"),
+            Expr::Hetero => write!(f, "hetero"),
+            Expr::Ligand => write!(f, "ligand"),
+            Expr::Water => write!(f, "water"),
+            Expr::Hydrogen => write!(f, "hydrogen"),
+            Expr::Backbone => write!(f, "backbone"),
+            Expr::Sidechain => write!(f, "sidechain"),
+            Expr::Chain(c) => write!(f, "chain {c}"),
+            Expr::ResName(n) => write!(f, "resn {n}"),
+            Expr::Element(e) => write!(f, "element {e}"),
+            Expr::ResId(lo, hi) if lo == hi => write!(f, "resi {lo}"),
+            Expr::ResId(lo, hi) => write!(f, "resi {lo}-{hi}"),
+            Expr::Numeric { field, op, value } => {
+                let name = match field {
+                    NumField::BFactor => "b",
+                    NumField::Occupancy => "q",
                 };
-                tokens.push(Token::Cmp(op));
-                i += len;
+                write!(f, "{name} {} {value}", op.symbol())
             }
-            _ => {
-                let start = i;
-                while i < bytes.len() {
-                    let ch = bytes[i] as char;
-                    if ch.is_whitespace()
-                        || matches!(ch, '(' | ')' | '&' | '|' | '<' | '>' | '=' | '!')
-                    {
-                        break;
-                    }
-                    i += 1;
-                }
-                tokens.push(Token::Ident(input[start..i].to_string()));
-            }
+            Expr::And(l, r) => write!(f, "({l}) and ({r})"),
+            Expr::Or(l, r) => write!(f, "({l}) or ({r})"),
+            Expr::Not(inner) => write!(f, "not ({inner})"),
+            Expr::ByRes(inner) => write!(f, "byres ({inner})"),
+            Expr::ByChain(inner) => write!(f, "bychain ({inner})"),
+            Expr::ByMol(inner) => write!(f, "bymol ({inner})"),
+            Expr::Within(r, inner) => write!(f, "within {r} of ({inner})"),
+            Expr::Around(r, inner) => write!(f, "around {r} of ({inner})"),
+            Expr::Expand(r, inner) => write!(f, "expand {r} of ({inner})"),
+            Expr::Beyond(r, inner) => write!(f, "beyond {r} of ({inner})"),
         }
-    }
-    tokens
-}
-
-// ---------------------------------------------------------------------------
-// Parser (recursive descent; precedence: or < and < prefix unary)
-// ---------------------------------------------------------------------------
-
-struct Parser {
-    tokens: Vec<Token>,
-    pos: usize,
-}
-
-/// Parse a selection string into an expression tree.
-pub fn parse(selection: &str) -> Result<Expr, ParseError> {
-    let mut parser = Parser {
-        tokens: tokenize(selection),
-        pos: 0,
-    };
-    // An empty selection means "everything".
-    if parser.tokens.is_empty() {
-        return Ok(Expr::All);
-    }
-    let expr = parser.parse_or()?;
-    if let Some(tok) = parser.peek() {
-        return Err(ParseError::TrailingInput(describe(tok)));
-    }
-    Ok(expr)
-}
-
-fn describe(tok: &Token) -> String {
-    match tok {
-        Token::Ident(s) => s.clone(),
-        Token::LParen => "(".into(),
-        Token::RParen => ")".into(),
-        Token::Cmp(_) => "comparison".into(),
-    }
-}
-
-impl Parser {
-    fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.pos)
-    }
-
-    fn next(&mut self) -> Option<Token> {
-        let tok = self.tokens.get(self.pos).cloned();
-        if tok.is_some() {
-            self.pos += 1;
-        }
-        tok
-    }
-
-    /// If the next token is the given keyword, consume it and return true.
-    fn eat_keyword(&mut self, kw: &str) -> bool {
-        if let Some(Token::Ident(s)) = self.peek() {
-            if s.eq_ignore_ascii_case(kw) {
-                self.pos += 1;
-                return true;
-            }
-        }
-        false
-    }
-
-    fn expect_keyword(&mut self, kw: &'static str) -> Result<(), ParseError> {
-        match self.next() {
-            Some(Token::Ident(ref s)) if s.eq_ignore_ascii_case(kw) => Ok(()),
-            Some(tok) => Err(ParseError::Expected {
-                expected: kw,
-                found: describe(&tok),
-            }),
-            None => Err(ParseError::UnexpectedEnd { expected: kw }),
-        }
-    }
-
-    fn next_ident(&mut self, expected: &'static str) -> Result<String, ParseError> {
-        match self.next() {
-            Some(Token::Ident(s)) => Ok(s),
-            Some(tok) => Err(ParseError::Expected {
-                expected,
-                found: describe(&tok),
-            }),
-            None => Err(ParseError::UnexpectedEnd { expected }),
-        }
-    }
-
-    fn next_number(&mut self) -> Result<f64, ParseError> {
-        let s = self.next_ident("a number")?;
-        s.parse::<f64>().map_err(|_| ParseError::BadNumber(s))
-    }
-
-    fn next_cmp(&mut self) -> Result<CmpOp, ParseError> {
-        match self.next() {
-            Some(Token::Cmp(op)) => Ok(op),
-            Some(tok) => Err(ParseError::Expected {
-                expected: "a comparison operator",
-                found: describe(&tok),
-            }),
-            None => Err(ParseError::UnexpectedEnd {
-                expected: "a comparison operator",
-            }),
-        }
-    }
-
-    fn parse_or(&mut self) -> Result<Expr, ParseError> {
-        let mut lhs = self.parse_and()?;
-        while self.eat_keyword("or") {
-            let rhs = self.parse_and()?;
-            lhs = Expr::Or(Box::new(lhs), Box::new(rhs));
-        }
-        Ok(lhs)
-    }
-
-    fn parse_and(&mut self) -> Result<Expr, ParseError> {
-        let mut lhs = self.parse_unary()?;
-        while self.eat_keyword("and") {
-            let rhs = self.parse_unary()?;
-            lhs = Expr::And(Box::new(lhs), Box::new(rhs));
-        }
-        Ok(lhs)
-    }
-
-    fn parse_unary(&mut self) -> Result<Expr, ParseError> {
-        if self.eat_keyword("not") {
-            return Ok(Expr::Not(Box::new(self.parse_unary()?)));
-        }
-        if self.eat_keyword("byres") {
-            return Ok(Expr::ByRes(Box::new(self.parse_unary()?)));
-        }
-        if self.eat_keyword("bychain") {
-            return Ok(Expr::ByChain(Box::new(self.parse_unary()?)));
-        }
-        if self.eat_keyword("bymol") {
-            return Ok(Expr::ByMol(Box::new(self.parse_unary()?)));
-        }
-        for kw in ["around", "within", "expand", "beyond"] {
-            if self.eat_keyword(kw) {
-                let radius = self.next_number()?;
-                if radius < 0.0 {
-                    return Err(ParseError::NegativeRadius(radius));
-                }
-                self.expect_keyword("of")?;
-                let operand = Box::new(self.parse_unary()?);
-                return Ok(match kw {
-                    "around" => Expr::Around(radius, operand),
-                    "within" => Expr::Within(radius, operand),
-                    "expand" => Expr::Expand(radius, operand),
-                    _ => Expr::Beyond(radius, operand),
-                });
-            }
-        }
-        self.parse_primary()
-    }
-
-    fn parse_primary(&mut self) -> Result<Expr, ParseError> {
-        match self.next() {
-            Some(Token::LParen) => {
-                let inner = self.parse_or()?;
-                match self.next() {
-                    Some(Token::RParen) => Ok(inner),
-                    Some(tok) => Err(ParseError::Expected {
-                        expected: ")",
-                        found: describe(&tok),
-                    }),
-                    None => Err(ParseError::UnexpectedEnd { expected: ")" }),
-                }
-            }
-            Some(Token::Ident(kw)) => self.parse_keyword(&kw),
-            Some(tok) => Err(ParseError::Expected {
-                expected: "a selection term",
-                found: describe(&tok),
-            }),
-            None => Err(ParseError::UnexpectedEnd {
-                expected: "a selection term",
-            }),
-        }
-    }
-
-    fn parse_keyword(&mut self, kw: &str) -> Result<Expr, ParseError> {
-        let lower = kw.to_ascii_lowercase();
-        Ok(match lower.as_str() {
-            "all" => Expr::All,
-            "none" => Expr::None,
-            "protein" | "polymer" | "nucleic" => Expr::Protein,
-            "hetero" | "hetatm" => Expr::Hetero,
-            "ligand" => Expr::Ligand,
-            "water" | "solvent" => Expr::Water,
-            "hydrogen" | "hydrogens" => Expr::Hydrogen,
-            "backbone" => Expr::Backbone,
-            "sidechain" => Expr::Sidechain,
-            "chain" => Expr::Chain(self.next_ident("a chain id")?),
-            "resn" | "resname" => Expr::ResName(self.next_ident("a residue name")?),
-            "element" | "elem" => Expr::Element(self.next_ident("an element symbol")?),
-            "resi" | "resid" => {
-                let spec = self.next_ident("a residue number or range")?;
-                let (lo, hi) = parse_range(&spec).ok_or(ParseError::BadRange(spec))?;
-                Expr::ResId(lo, hi)
-            }
-            "b" | "q" => {
-                let field = if lower == "b" {
-                    NumField::BFactor
-                } else {
-                    NumField::Occupancy
-                };
-                let op = self.next_cmp()?;
-                let value = self.next_number()?;
-                Expr::Numeric { field, op, value }
-            }
-            _ => return Err(ParseError::UnknownKeyword(kw.to_string())),
-        })
-    }
-}
-
-/// Parse `"N"` or `"N-M"` into an inclusive `(lo, hi)` range (allowing a leading
-/// negative low bound).
-fn parse_range(spec: &str) -> Option<(i32, i32)> {
-    if let Some(rel) = spec.get(1..).and_then(|s| s.find('-')) {
-        let idx = rel + 1;
-        let lo = spec[..idx].trim().parse().ok()?;
-        let hi = spec[idx + 1..].trim().parse().ok()?;
-        Some((lo, hi))
-    } else {
-        let n: i32 = spec.trim().parse().ok()?;
-        Some((n, n))
     }
 }
 
@@ -446,25 +240,14 @@ fn parse_range(spec: &str) -> Option<(i32, i32)> {
 // Evaluation
 // ---------------------------------------------------------------------------
 
-/// Resolve a selection string to the matching atom indices (sorted ascending).
-///
-/// On a parse error this warns and selects nothing; the Python bindings validate
-/// selections up front (raising `ValueError`) so this path is defensive.
-pub fn evaluate(structure: &Structure, selection: &str) -> Vec<usize> {
-    match parse(selection) {
-        Ok(expr) => {
-            let ctx = EvalCtx::new(structure);
-            let mask = eval(&expr, structure, &ctx);
-            mask.iter()
-                .enumerate()
-                .filter_map(|(i, &b)| b.then_some(i))
-                .collect()
-        }
-        Err(e) => {
-            eprintln!("molscene: invalid selection {selection:?}: {e}; selecting nothing.");
-            Vec::new()
-        }
-    }
+/// Resolve a selection [`Expr`] to the matching atom indices (sorted ascending).
+pub fn evaluate(structure: &Structure, expr: &Expr) -> Vec<usize> {
+    let ctx = EvalCtx::new(structure);
+    let mask = eval(expr, structure, &ctx);
+    mask.iter()
+        .enumerate()
+        .filter_map(|(i, &b)| b.then_some(i))
+        .collect()
 }
 
 /// Shared, lazily-built state for a single evaluation pass.
@@ -501,6 +284,7 @@ fn eval(expr: &Expr, structure: &Structure, ctx: &EvalCtx) -> Vec<bool> {
         Expr::All => vec![true; atoms.len()],
         Expr::None => vec![false; atoms.len()],
         Expr::Protein => mask_from(&|a| !a.hetero),
+        Expr::Nucleic => mask_from(&|a| !a.hetero && is_nucleic(&a.residue_name)),
         Expr::Hetero => mask_from(&|a| a.hetero),
         Expr::Ligand => mask_from(&|a| a.hetero && !is_water(&a.residue_name)),
         Expr::Water => mask_from(&|a| is_water(&a.residue_name)),
@@ -684,74 +468,86 @@ mod tests {
     #[test]
     fn all_and_none() {
         let s = fixture();
-        assert_eq!(evaluate(&s, "all"), vec![0, 1, 2, 3, 4, 5]);
-        assert_eq!(evaluate(&s, ""), vec![0, 1, 2, 3, 4, 5]);
-        assert!(evaluate(&s, "none").is_empty());
+        assert_eq!(evaluate(&s, &Expr::All), vec![0, 1, 2, 3, 4, 5]);
+        assert!(evaluate(&s, &Expr::None).is_empty());
     }
 
     #[test]
     fn classification_macros() {
         let s = fixture();
-        assert_eq!(evaluate(&s, "protein"), vec![0, 1, 2, 3]);
-        assert_eq!(evaluate(&s, "hetero"), vec![4, 5]);
-        assert_eq!(evaluate(&s, "water"), vec![4]);
-        assert_eq!(evaluate(&s, "ligand"), vec![5]);
-        assert_eq!(evaluate(&s, "backbone"), vec![0, 1, 2]);
+        assert_eq!(evaluate(&s, &Expr::Protein), vec![0, 1, 2, 3]);
+        assert_eq!(evaluate(&s, &Expr::Hetero), vec![4, 5]);
+        assert_eq!(evaluate(&s, &Expr::Water), vec![4]);
+        assert_eq!(evaluate(&s, &Expr::Ligand), vec![5]);
+        assert_eq!(evaluate(&s, &Expr::Backbone), vec![0, 1, 2]);
         // sidechain: non-hetero, non-backbone, non-hydrogen -> just CB.
-        assert_eq!(evaluate(&s, "sidechain"), vec![3]);
+        assert_eq!(evaluate(&s, &Expr::Sidechain), vec![3]);
+    }
+
+    #[test]
+    fn nucleic_by_residue_name() {
+        // One DNA residue (DA), one protein residue (ALA), one water — only the
+        // DA atoms are nucleic; protein() stays the broader non-hetero set.
+        let s = Structure::new(vec![
+            atom(0, "P", "P", "DA", 1, "A", false, 0.0, 1.0),
+            atom(1, "CA", "C", "ALA", 2, "A", false, 0.0, 1.0),
+            atom(2, "O", "O", "HOH", 101, "A", true, 0.0, 1.0),
+        ]);
+        assert_eq!(evaluate(&s, &Expr::Nucleic), vec![0]);
+        assert_eq!(evaluate(&s, &Expr::Protein), vec![0, 1]);
     }
 
     #[test]
     fn predicates() {
         let s = fixture();
-        assert_eq!(evaluate(&s, "chain A"), vec![0, 1, 2, 4, 5]);
-        assert_eq!(evaluate(&s, "element C"), vec![1, 2, 3]);
-        assert_eq!(evaluate(&s, "resn HOH"), vec![4]);
-        assert_eq!(evaluate(&s, "resi 1"), vec![0, 1, 2, 3]);
-        assert_eq!(evaluate(&s, "resi 100-200"), vec![4]);
+        assert_eq!(evaluate(&s, &Expr::chain("A")), vec![0, 1, 2, 4, 5]);
+        assert_eq!(evaluate(&s, &Expr::element("C")), vec![1, 2, 3]);
+        assert_eq!(evaluate(&s, &Expr::resn("HOH")), vec![4]);
+        assert_eq!(evaluate(&s, &Expr::resi(1, 1)), vec![0, 1, 2, 3]);
+        assert_eq!(evaluate(&s, &Expr::resi(100, 200)), vec![4]);
     }
 
     #[test]
     fn boolean_composition_evaluates() {
         let s = fixture();
         // chain A = {0,1,2,4,5}, water = {4}
-        assert_eq!(evaluate(&s, "(chain A) and (water)"), vec![4]);
+        assert_eq!(evaluate(&s, &Expr::chain("A").and(Expr::Water)), vec![4]);
         // protein = {0,1,2,3}, water = {4}
-        assert_eq!(evaluate(&s, "(protein) or (water)"), vec![0, 1, 2, 3, 4]);
+        assert_eq!(
+            evaluate(&s, &Expr::Protein.or(Expr::Water)),
+            vec![0, 1, 2, 3, 4]
+        );
         // no hydrogens in fixture -> not hydrogen = all
-        assert_eq!(evaluate(&s, "not (hydrogen)"), vec![0, 1, 2, 3, 4, 5]);
+        assert_eq!(evaluate(&s, &Expr::Hydrogen.not()), vec![0, 1, 2, 3, 4, 5]);
         // nested
         assert_eq!(
-            evaluate(&s, "((chain A) and (protein)) or (ligand)"),
+            evaluate(&s, &Expr::chain("A").and(Expr::Protein).or(Expr::Ligand)),
             vec![0, 1, 2, 5]
         );
     }
 
     #[test]
-    fn parses_operator_emitted_strings() {
-        // Exactly what the Python `& | ~` operators produce.
-        let s = fixture();
-        assert_eq!(evaluate(&s, "(chain A) and (ligand)"), vec![5]);
-        assert_eq!(evaluate(&s, "not (water)"), vec![0, 1, 2, 3, 5]);
-    }
-
-    #[test]
     fn numeric_predicates() {
         let s = fixture();
-        assert_eq!(evaluate(&s, "b > 30"), vec![3, 4, 5]);
-        assert_eq!(evaluate(&s, "b < 30"), vec![0, 1]);
-        assert_eq!(evaluate(&s, "b >= 30"), vec![2, 3, 4, 5]);
-        assert_eq!(evaluate(&s, "q = 1"), vec![0, 1, 2, 4, 5]);
-        assert_eq!(evaluate(&s, "q != 1"), vec![3]);
+        let b = |op, v| Expr::numeric(NumField::BFactor, op, v);
+        let q = |op, v| Expr::numeric(NumField::Occupancy, op, v);
+        assert_eq!(evaluate(&s, &b(CmpOp::Gt, 30.0)), vec![3, 4, 5]);
+        assert_eq!(evaluate(&s, &b(CmpOp::Lt, 30.0)), vec![0, 1]);
+        assert_eq!(evaluate(&s, &b(CmpOp::Ge, 30.0)), vec![2, 3, 4, 5]);
+        assert_eq!(evaluate(&s, &q(CmpOp::Eq, 1.0)), vec![0, 1, 2, 4, 5]);
+        assert_eq!(evaluate(&s, &q(CmpOp::Ne, 1.0)), vec![3]);
     }
 
     #[test]
     fn aggregation() {
         let s = fixture();
         // element N -> atom 0 (ALA 1 chain A); byres expands to that residue.
-        assert_eq!(evaluate(&s, "byres (element N)"), vec![0, 1, 2]);
+        assert_eq!(evaluate(&s, &Expr::element("N").byres()), vec![0, 1, 2]);
         // resi 201 -> FE in chain A; bychain expands to all chain A.
-        assert_eq!(evaluate(&s, "bychain (resi 201)"), vec![0, 1, 2, 4, 5]);
+        assert_eq!(
+            evaluate(&s, &Expr::resi(201, 201).bychain()),
+            vec![0, 1, 2, 4, 5]
+        );
     }
 
     #[test]
@@ -762,17 +558,18 @@ mod tests {
             at(1, "C", 2, 1.5, 0.0, 0.0),
             at(2, "C", 3, 3.0, 0.0, 0.0),
         ]);
+        let r1 = || Expr::resi(1, 1);
         // within 2.0 of resi 1: atom0 (self) + atom1 (1.5) ; atom2 (3.0) excluded.
-        assert_eq!(evaluate(&s, "within 2.0 of (resi 1)"), vec![0, 1]);
+        assert_eq!(evaluate(&s, &r1().within(2.0)), vec![0, 1]);
         // around excludes the seed itself.
-        assert_eq!(evaluate(&s, "around 2.0 of (resi 1)"), vec![1]);
+        assert_eq!(evaluate(&s, &r1().around(2.0)), vec![1]);
         // beyond is the complement of within.
-        assert_eq!(evaluate(&s, "beyond 2.0 of (resi 1)"), vec![2]);
+        assert_eq!(evaluate(&s, &r1().beyond(2.0)), vec![2]);
         // expand behaves like within.
-        assert_eq!(evaluate(&s, "expand 2.0 of (resi 1)"), vec![0, 1]);
+        assert_eq!(evaluate(&s, &r1().expand(2.0)), vec![0, 1]);
         // boundary: exactly the radius is included.
-        assert_eq!(evaluate(&s, "within 1.5 of (resi 1)"), vec![0, 1]);
-        assert_eq!(evaluate(&s, "within 1.4 of (resi 1)"), vec![0]);
+        assert_eq!(evaluate(&s, &r1().within(1.5)), vec![0, 1]);
+        assert_eq!(evaluate(&s, &r1().within(1.4)), vec![0]);
     }
 
     #[test]
@@ -784,9 +581,9 @@ mod tests {
             at(2, "O", 2, 20.0, 0.0, 0.0),
         ]);
         // bymol of resi 1 (atoms 0,1) -> their whole bonded molecule = {0,1}.
-        assert_eq!(evaluate(&s, "bymol (resi 1)"), vec![0, 1]);
+        assert_eq!(evaluate(&s, &Expr::resi(1, 1).bymol()), vec![0, 1]);
         // bymol of the isolated atom -> just itself.
-        assert_eq!(evaluate(&s, "bymol (resi 2)"), vec![2]);
+        assert_eq!(evaluate(&s, &Expr::resi(2, 2).bymol()), vec![2]);
     }
 
     #[test]
@@ -803,44 +600,27 @@ mod tests {
         a2.residue_name = "HOH".into();
         let s = Structure::new(vec![a0, a1, a2]);
         // around 2 of ligand -> {1,2}; chain A -> all; not water -> drop atom2 => {1}
-        let got = evaluate(
-            &s,
-            "((chain A) and (around 2.0 of (ligand))) and (not (water))",
-        );
-        assert_eq!(got, vec![1]);
+        let sel = Expr::chain("A")
+            .and(Expr::Ligand.around(2.0))
+            .and(Expr::Water.not());
+        assert_eq!(evaluate(&s, &sel), vec![1]);
     }
 
     #[test]
-    fn parse_errors() {
-        assert!(matches!(
-            parse("chain"),
-            Err(ParseError::UnexpectedEnd { .. })
-        ));
-        assert!(matches!(
-            parse("around of (ligand)"),
-            Err(ParseError::BadNumber(_))
-        ));
-        assert!(matches!(
-            parse("around 4 (ligand)"),
-            Err(ParseError::Expected { expected: "of", .. })
-        ));
-        assert!(matches!(
-            parse("(chain A"),
-            Err(ParseError::UnexpectedEnd { expected: ")" })
-        ));
-        assert!(matches!(
-            parse("b >"),
-            Err(ParseError::UnexpectedEnd { .. })
-        ));
-        assert!(matches!(
-            parse("frobnicate"),
-            Err(ParseError::UnknownKeyword(_))
-        ));
-        assert!(matches!(
-            parse("around -1 of (ligand)"),
-            Err(ParseError::NegativeRadius(_))
-        ));
-        // a parse error selects nothing (and warns).
-        assert!(evaluate(&fixture(), "frobnicate").is_empty());
+    fn display_is_readable() {
+        assert_eq!(Expr::Protein.to_string(), "protein");
+        assert_eq!(Expr::chain("A").to_string(), "chain A");
+        assert_eq!(Expr::resi(10, 30).to_string(), "resi 10-30");
+        assert_eq!(Expr::resi(42, 42).to_string(), "resi 42");
+        assert_eq!(
+            Expr::numeric(NumField::BFactor, CmpOp::Gt, 30.0).to_string(),
+            "b > 30"
+        );
+        assert_eq!(
+            Expr::chain("A").and(Expr::Protein).to_string(),
+            "(chain A) and (protein)"
+        );
+        assert_eq!(Expr::Hydrogen.not().to_string(), "not (hydrogen)");
+        assert_eq!(Expr::Ligand.around(4.0).to_string(), "around 4 of (ligand)");
     }
 }
