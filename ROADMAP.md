@@ -60,6 +60,13 @@ These constrain every milestone below:
   SES (accessible-solid rasterization + Felzenszwalb–Huttenlocher distance
   transform + `fast-surface-nets`), nearest-atom vertex coloring, and depth-sorted
   **mesh-group transparency** (`meshes` is a list of groups each with an `opacity`).
+- **Chemistry & bond orders** (v0.6): bonds carry an order (single/double/triple/
+  aromatic) — read explicitly from **SDF / V2000 molfile** imports
+  (`ms.load("lig.sdf")`) or perceived from geometry for distance-only sources
+  (`chem.rs`: SSSR ring finding + planarity-based aromatic detection + bond-length
+  heuristics). Sticks render double/triple bonds as **parallel offset cylinders**
+  (oriented by ring centroid or a neighbor-atom plane) and aromatic rings with the
+  **inner-ring depiction**.
 
 ### Current limitations (these drive the milestones below)
 
@@ -206,20 +213,28 @@ sticks** via per-instance alpha (an instanced opacity attribute on the Three.js
 `InstancedMesh`). v0.5 ships transparency for **mesh groups only** (surface /
 cartoon); instanced primitives stay opaque.
 
-## v0.6 — Chemistry & bond orders
+## v0.6 — Chemistry & bond orders ✅ (shipped)
 
 Correct chemistry for ligands and small molecules. (Proteins stay single-bond
 sticks, as is conventional.)
 
-- **Bond orders**: read from mmCIF / the Chemical Component Dictionary and from
-  SDF / mol2 imports; geometry-based perception (ring SSSR + heuristics) as a
-  fallback. Carry order (and aromaticity) on `Structure`'s bonds.
+- **Bond orders**: read explicitly from **SDF / V2000 molfile** imports (a
+  hand-written parser, behind the `parse` feature, tagging atoms as a ligand
+  residue); geometry-based perception as the fallback for distance-only sources
+  (PDB/mmCIF). Order (single/double/triple/aromatic) is carried on `Structure`'s
+  bonds as a `Bond { a, b, order }`. _(mmCIF / Chemical Component Dictionary and
+  mol2 imports remain future work — pdbtbx surfaces no orders.)_
+- **Perception** (`chem.rs`, pure-compute / WASM-safe): smallest-set-of-smallest-
+  rings via per-edge BFS, aromatic-ring detection (size 5/6, aromatic elements,
+  Newell-normal planarity), and bond-length heuristics for double/triple bonds —
+  documented as a best-effort visual heuristic, never overriding explicit orders.
 - **Double / triple bonds**: parallel offset cylinders, oriented by a bond
-  reference plane (neighbor atoms / ring plane).
-- **Aromatic rings**: inner-ring depiction (or alternating doubles).
-- Ligand-focused: pairs with better default handling of `organic` / `ligand`.
+  reference plane (ring centroid, else a neighbor atom).
+- **Aromatic rings**: inner-ring depiction (a full bond plus a shorter cylinder
+  offset toward the ring centroid).
 
-**Deliverable:** a ligand rendered with correct double bonds and aromatic rings.
+**Deliverable:** `ms.load("ligand.sdf").sticks()` renders correct double bonds
+and aromatic rings (inner ring). ✅
 
 ## v0.7 — Rendering quality & performance
 

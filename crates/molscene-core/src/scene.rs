@@ -52,6 +52,16 @@ impl Scene {
         Self::new(Source::InlinePdb { data: data.into() })
     }
 
+    /// Parse `text` as an SDF / V2000 molfile and build a scene holding the
+    /// resulting coordinates and explicit bond orders.
+    #[cfg(feature = "parse")]
+    pub fn from_sdf(text: &str, source: Source) -> Result<Self, crate::parse::ParseError> {
+        let structure = crate::parse::parse_str(text, crate::parse::InputFormat::Sdf)?;
+        let mut scene = Self::new(source);
+        scene.structure = Some(structure);
+        Ok(scene)
+    }
+
     /// Parse `text` and build a scene that holds the resulting coordinates.
     /// `source` records provenance (e.g. an RCSB id).
     #[cfg(feature = "parse")]

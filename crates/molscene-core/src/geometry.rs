@@ -222,6 +222,190 @@ fn midpoint(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     ]
 }
 
+// -- multi-bond geometry ----------------------------------------------------
+
+/// Half-distance between adjacent parallel cylinders of a double bond, ×radius.
+const DOUBLE_SEP: f32 = 1.0;
+/// Half-distance for the outer cylinders of a triple bond, ×radius.
+const TRIPLE_SEP: f32 = 1.5;
+/// Radius of the sub-cylinders in a multi/aromatic bond, ×radius (so a double
+/// isn't visually fatter than a single).
+const MULTI_RADIUS: f32 = 0.6;
+/// Inward offset of the aromatic inner-ring cylinder, ×radius.
+const AROMATIC_INNER: f32 = 1.6;
+
+fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+fn add(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+fn scale(a: [f32; 3], s: f32) -> [f32; 3] {
+    [a[0] * s, a[1] * s, a[2] * s]
+}
+fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+fn length(a: [f32; 3]) -> f32 {
+    dot(a, a).sqrt()
+}
+fn normalize(a: [f32; 3]) -> [f32; 3] {
+    let len = length(a);
+    if len > 1e-6 {
+        scale(a, 1.0 / len)
+    } else {
+        [0.0, 0.0, 0.0]
+    }
+}
+fn lerp(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
+    add(scale(a, 1.0 - t), scale(b, t))
+}
+
+/// A unit vector perpendicular to the `pa→pb` axis, lying in the plane defined
+/// by `reference` (a ring centroid or a neighbor atom). Falls back to an
+/// arbitrary perpendicular when no usable reference exists.
+fn offset_dir(pa: [f32; 3], pb: [f32; 3], reference: Option<[f32; 3]>) -> [f32; 3] {
+    let axis = normalize(sub(pb, pa));
+    if let Some(refp) = reference {
+        let v = sub(refp, pa);
+        let perp = sub(v, scale(axis, dot(v, axis)));
+        if length(perp) > 1e-4 {
+            return normalize(perp);
+        }
+    }
+    // Any axis not parallel to the bond, projected to a perpendicular.
+    let t = if axis[0].abs() < 0.9 {
+        [1.0, 0.0, 0.0]
+    } else {
+        [0.0, 1.0, 0.0]
+    };
+    normalize(cross(axis, t))
+}
+
+/// Push one two-color cylinder (split at the midpoint, colored `ca`/`cb`).
+fn push_segment(
+    cyl: &mut Cylinders,
+    start: [f32; 3],
+    end: [f32; 3],
+    radius: f32,
+    ca: Rgb,
+    cb: Rgb,
+) {
+    let mid = midpoint(start, end);
+    cyl.starts.push(start);
+    cyl.ends.push(mid);
+    cyl.radii.push(radius);
+    cyl.colors.push(ca);
+    cyl.starts.push(mid);
+    cyl.ends.push(end);
+    cyl.radii.push(radius);
+    cyl.colors.push(cb);
+}
+
+/// Emit the cylinder(s) for one bond according to its order. `reference` orients
+/// the offset of multi/aromatic bonds (ring centroid or a neighbor atom).
+#[allow(clippy::too_many_arguments)]
+fn emit_bond(
+    cyl: &mut Cylinders,
+    order: crate::structure::BondOrder,
+    pa: [f32; 3],
+    pb: [f32; 3],
+    radius: f32,
+    ca: Rgb,
+    cb: Rgb,
+    reference: Option<[f32; 3]>,
+) {
+    use crate::structure::BondOrder::*;
+    match order {
+        Single => push_segment(cyl, pa, pb, radius, ca, cb),
+        Double => {
+            let o = scale(offset_dir(pa, pb, reference), radius * DOUBLE_SEP);
+            let rm = radius * MULTI_RADIUS;
+            push_segment(cyl, add(pa, o), add(pb, o), rm, ca, cb);
+            push_segment(cyl, sub(pa, o), sub(pb, o), rm, ca, cb);
+        }
+        Triple => {
+            let o = scale(offset_dir(pa, pb, reference), radius * TRIPLE_SEP);
+            let rm = radius * MULTI_RADIUS;
+            push_segment(cyl, pa, pb, rm, ca, cb);
+            push_segment(cyl, add(pa, o), add(pb, o), rm, ca, cb);
+            push_segment(cyl, sub(pa, o), sub(pb, o), rm, ca, cb);
+        }
+        Aromatic => {
+            // A full single bond plus a shorter cylinder offset toward the ring
+            // interior — the classic inner-ring depiction.
+            push_segment(cyl, pa, pb, radius, ca, cb);
+            let o = scale(offset_dir(pa, pb, reference), radius * AROMATIC_INNER);
+            let inner_start = add(lerp(pa, pb, 0.2), o);
+            let inner_end = add(lerp(pa, pb, 0.8), o);
+            push_segment(cyl, inner_start, inner_end, radius * MULTI_RADIUS, ca, cb);
+        }
+    }
+}
+
+/// Precomputed lookup for orienting multi/aromatic bond offsets: ring centroids
+/// keyed by edge, plus atom positions and adjacency for the neighbor fallback.
+struct BondCtx {
+    positions: Vec<[f32; 3]>,
+    adj: Vec<Vec<usize>>,
+    centroids: Vec<[f32; 3]>,
+    edge_ring: HashMap<(usize, usize), usize>,
+}
+
+impl BondCtx {
+    fn new(structure: &Structure, perc: &crate::chem::Perception) -> Self {
+        let positions: Vec<[f32; 3]> = structure.atoms.iter().map(pos).collect();
+        let mut adj = vec![Vec::new(); structure.atoms.len()];
+        for bond in &perc.bonds {
+            adj[bond.a].push(bond.b);
+            adj[bond.b].push(bond.a);
+        }
+        let mut centroids = Vec::with_capacity(perc.rings.len());
+        let mut edge_ring = HashMap::new();
+        for (ri, ring) in perc.rings.iter().enumerate() {
+            let mut c = [0.0f32; 3];
+            for &i in ring {
+                c = add(c, positions[i]);
+            }
+            centroids.push(scale(c, 1.0 / ring.len() as f32));
+            let m = ring.len();
+            for k in 0..m {
+                let a = ring[k];
+                let b = ring[(k + 1) % m];
+                edge_ring.entry((a.min(b), a.max(b))).or_insert(ri);
+            }
+        }
+        Self {
+            positions,
+            adj,
+            centroids,
+            edge_ring,
+        }
+    }
+
+    /// The reference point used to orient bond `i–j`'s offset: its ring centroid
+    /// if the bond is in a ring, otherwise a neighboring atom, else `None`.
+    fn reference(&self, i: usize, j: usize) -> Option<[f32; 3]> {
+        if let Some(&ri) = self.edge_ring.get(&(i.min(j), i.max(j))) {
+            return Some(self.centroids[ri]);
+        }
+        if let Some(&k) = self.adj[i].iter().find(|&&k| k != j) {
+            return Some(self.positions[k]);
+        }
+        if let Some(&k) = self.adj[j].iter().find(|&&k| k != i) {
+            return Some(self.positions[k]);
+        }
+        None
+    }
+}
+
 fn scheme_of(style: &crate::spec::Style) -> ColorScheme {
     style
         .color
@@ -240,8 +424,10 @@ impl Scene {
         };
 
         let ctx = ColorCtx::new(structure);
-        let bonds = structure.bonds();
         let overrides = self.color_overrides(structure);
+        // Perceived bonds + rings, computed lazily on the first sticks rep so
+        // cartoon-/surface-only scenes don't pay for ring perception.
+        let mut perception: Option<crate::chem::Perception> = None;
 
         for rep in self.representations() {
             let indices = evaluate(structure, &rep.selection);
@@ -268,24 +454,32 @@ impl Scene {
                     let radius = rep.style.radius.unwrap_or(DEFAULT_STICK_RADIUS);
                     let selected: std::collections::HashSet<usize> =
                         indices.iter().copied().collect();
-                    // Half-cylinders, split at the bond midpoint and colored by
-                    // each end atom.
-                    for &(i, j) in &bonds {
+                    let perc: &crate::chem::Perception =
+                        perception.get_or_insert_with(|| crate::chem::perceive(structure));
+                    let bond_ctx = BondCtx::new(structure, perc);
+                    // Each bond becomes one or more half-cylinders (split at the
+                    // bond midpoint, colored by each end atom) per its order:
+                    // single → 1 line, double → 2, triple → 3, aromatic → a full
+                    // line plus an inner ring-ward line.
+                    for bond in &perc.bonds {
+                        let (i, j) = (bond.a, bond.b);
                         if !selected.contains(&i) || !selected.contains(&j) {
                             continue;
                         }
                         let a = &structure.atoms[i];
                         let b = &structure.atoms[j];
                         let (pa, pb) = (pos(a), pos(b));
-                        let mid = midpoint(pa, pb);
-                        g.cylinders.starts.push(pa);
-                        g.cylinders.ends.push(mid);
-                        g.cylinders.radii.push(radius);
-                        g.cylinders.colors.push(color_at(i, a));
-                        g.cylinders.starts.push(mid);
-                        g.cylinders.ends.push(pb);
-                        g.cylinders.radii.push(radius);
-                        g.cylinders.colors.push(color_at(j, b));
+                        let (ca, cb) = (color_at(i, a), color_at(j, b));
+                        emit_bond(
+                            &mut g.cylinders,
+                            bond.order,
+                            pa,
+                            pb,
+                            radius,
+                            ca,
+                            cb,
+                            bond_ctx.reference(i, j),
+                        );
                     }
                     // Rounded joints / lone atoms: a sphere at each selected atom.
                     for &i in &indices {
@@ -467,6 +661,54 @@ mod tests {
         // half cylinder meets at the midpoint (0.75, 0, 0)
         assert_eq!(g.cylinders.ends[0], [0.75, 0.0, 0.0]);
         assert_eq!(g.cylinders.starts[1], [0.75, 0.0, 0.0]);
+    }
+
+    fn cylinder_count_for(structure: Structure) -> usize {
+        let mut scene = Scene::from_rcsb("test").with_structure(structure);
+        scene.sticks(Expr::All, colored("element"));
+        scene.to_geometry().cylinders.starts.len()
+    }
+
+    fn diatomic(order: crate::structure::BondOrder) -> Structure {
+        Structure::new(vec![
+            atom(1, "C1", "C", 0.0, 0.0, 0.0),
+            atom(2, "C2", "C", 1.4, 0.0, 0.0),
+        ])
+        .with_bonds(vec![crate::structure::Bond { a: 0, b: 1, order }])
+    }
+
+    #[test]
+    fn bond_order_drives_cylinder_count() {
+        use crate::structure::BondOrder::*;
+        // single → 1 line (2 half-cylinders), double → 2 lines (4),
+        // triple → 3 lines (6), aromatic → full line + inner line (4).
+        assert_eq!(cylinder_count_for(diatomic(Single)), 2);
+        assert_eq!(cylinder_count_for(diatomic(Double)), 4);
+        assert_eq!(cylinder_count_for(diatomic(Triple)), 6);
+        assert_eq!(cylinder_count_for(diatomic(Aromatic)), 4);
+    }
+
+    #[test]
+    fn aromatic_ring_emits_inner_ring_cylinders() {
+        // A planar hexagon of carbons with explicit aromatic bonds: 6 bonds ×
+        // (full line + inner line) × 2 half-cylinders = 24 cylinders.
+        use crate::structure::{Bond, BondOrder};
+        let r = 1.39;
+        let mut atoms = Vec::new();
+        let mut bonds = Vec::new();
+        for k in 0..6 {
+            let t = std::f64::consts::PI / 3.0 * k as f64;
+            atoms.push(atom(k + 1, "C", "C", r * t.cos(), r * t.sin(), 0.0));
+        }
+        for k in 0..6 {
+            bonds.push(Bond {
+                a: k,
+                b: (k + 1) % 6,
+                order: BondOrder::Aromatic,
+            });
+        }
+        let st = Structure::new(atoms).with_bonds(bonds);
+        assert_eq!(cylinder_count_for(st), 24);
     }
 
     #[test]

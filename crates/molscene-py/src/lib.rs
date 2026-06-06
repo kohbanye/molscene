@@ -56,6 +56,19 @@ impl Scene {
         Ok(Scene { inner })
     }
 
+    /// Build a scene from inline SDF / V2000 molfile text (explicit bond orders).
+    #[staticmethod]
+    fn from_inline_sdf(sdf_text: &str) -> PyResult<Self> {
+        let inner = CoreScene::from_sdf(
+            sdf_text,
+            Source::InlineSdf {
+                data: sdf_text.to_string(),
+            },
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Scene { inner })
+    }
+
     /// Add a representation over `selection` with optional typed style.
     #[pyo3(signature = (kind, selection, color=None, opacity=None, scale=None, radius=None))]
     fn representation(

@@ -26,6 +26,8 @@ pub enum Source {
     Rcsb { id: String },
     /// Inline PDB text.
     InlinePdb { data: String },
+    /// Inline SDF / V2000 molfile text.
+    InlineSdf { data: String },
     /// Fetched from an arbitrary URL.
     Url { href: String },
 }

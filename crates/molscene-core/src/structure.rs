@@ -42,6 +42,29 @@ pub enum Ss {
     Loop,
 }
 
+/// Chemical bond order, carried on a [`Bond`]. `Aromatic` is a distinct class
+/// (not a Kekulé double) so the renderer can draw the inner-ring depiction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BondOrder {
+    Single,
+    Double,
+    Triple,
+    Aromatic,
+}
+
+/// A bond between two atoms (by index, `a < b`) with its chemical order.
+///
+/// Bond orders come either from an explicit source (SDF/mol2, stored on the
+/// [`Structure`]) or from geometry-based perception (`crate::chem`). They never
+/// enter the serialized `GeometrySpec` — the geometry layer turns each order
+/// into the right set of cylinders.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Bond {
+    pub a: usize,
+    pub b: usize,
+    pub order: BondOrder,
+}
+
 /// A parsed molecular structure.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Structure {
@@ -51,6 +74,10 @@ pub struct Structure {
     /// records — in that case the cartoon builder computes SS geometrically.
     /// Only `Helix`/`Sheet` residues are stored; anything absent is `Loop`.
     ss: std::collections::HashMap<(String, i32), Ss>,
+    /// Explicit bonds with orders, present only when the source carried them
+    /// (SDF/mol2). `None` for distance-only sources (PDB/mmCIF), where bond
+    /// orders are perceived from geometry at compile time instead.
+    explicit_bonds: Option<Vec<Bond>>,
 }
 
 impl Structure {
@@ -58,7 +85,29 @@ impl Structure {
         Self {
             atoms,
             ss: std::collections::HashMap::new(),
+            explicit_bonds: None,
         }
+    }
+
+    /// Attach explicit bonds with orders (from an SDF/mol2 import). Normalizes
+    /// each pair to `a < b` so connectivity matches the distance-inferred order.
+    pub fn with_bonds(mut self, bonds: Vec<Bond>) -> Self {
+        self.explicit_bonds = Some(
+            bonds
+                .into_iter()
+                .map(|b| Bond {
+                    a: b.a.min(b.b),
+                    b: b.a.max(b.b),
+                    order: b.order,
+                })
+                .collect(),
+        );
+        self
+    }
+
+    /// The structure's explicit bonds, if the source provided them.
+    pub fn explicit_bonds(&self) -> Option<&[Bond]> {
+        self.explicit_bonds.as_deref()
     }
 
     /// Whether the structure carries file-provided secondary-structure
@@ -117,15 +166,20 @@ impl Structure {
         self.atoms.iter().filter(|a| a.hetero).count()
     }
 
-    /// Infer covalent bonds from interatomic distances.
+    /// Connectivity as index pairs with `i < j`.
     ///
-    /// Two atoms are bonded when their distance is below the sum of their
-    /// covalent radii plus a tolerance, and above a small floor (to reject
-    /// duplicate/overlapping atoms). Returns index pairs with `i < j`.
+    /// When the structure carries explicit bonds (SDF/mol2), returns those
+    /// pairs. Otherwise infers covalent bonds from interatomic distances: two
+    /// atoms are bonded when their distance is below the sum of their covalent
+    /// radii plus a tolerance, and above a small floor (to reject
+    /// duplicate/overlapping atoms).
     ///
     /// O(n²) for now — fine for typical single structures (~hundreds to a few
     /// thousand atoms); a spatial grid can replace this for very large inputs.
     pub fn bonds(&self) -> Vec<(usize, usize)> {
+        if let Some(bonds) = &self.explicit_bonds {
+            return bonds.iter().map(|b| (b.a, b.b)).collect();
+        }
         const TOLERANCE: f64 = 0.45;
         const FLOOR_SQ: f64 = 0.16; // (0.4 Å)²
         let mut bonds = Vec::new();
@@ -228,6 +282,25 @@ mod tests {
             carbon(3, 3.0, 0.0, 0.0),
         ]);
         assert_eq!(s.bonds(), vec![(0, 1), (1, 2)]);
+    }
+
+    #[test]
+    fn explicit_bonds_drive_connectivity() {
+        // Three collinear carbons would distance-infer C0-C1 and C1-C2, but an
+        // explicit bond list (here only C0-C2) overrides that connectivity.
+        let s = Structure::new(vec![
+            carbon(1, 0.0, 0.0, 0.0),
+            carbon(2, 1.5, 0.0, 0.0),
+            carbon(3, 3.0, 0.0, 0.0),
+        ])
+        .with_bonds(vec![Bond {
+            a: 2,
+            b: 0,
+            order: BondOrder::Double,
+        }]);
+        // Pair is normalized to (a < b) and replaces distance inference.
+        assert_eq!(s.bonds(), vec![(0, 2)]);
+        assert_eq!(s.explicit_bonds().unwrap()[0].order, BondOrder::Double);
     }
 
     #[test]
