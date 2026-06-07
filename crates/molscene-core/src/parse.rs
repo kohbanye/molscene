@@ -9,7 +9,7 @@ use pdbtbx::{
     ReadOptions, StrictnessLevel,
 };
 
-use crate::structure::{Atom, Bond, BondOrder, Ss, Structure};
+use crate::structure::{Atom, Bond, BondOrder, Element, Ss, Structure};
 
 /// Errors that can occur while parsing a structure.
 #[derive(Debug)]
@@ -81,8 +81,8 @@ pub fn parse_str(text: &str, format: InputFormat) -> Result<Structure, ParseErro
             name: atom.name().to_string(),
             element: atom
                 .element()
-                .map(|e| e.symbol().to_string())
-                .unwrap_or_default(),
+                .map(|e| Element::from_symbol(e.symbol()))
+                .unwrap_or(Element::Other(String::new())),
             residue_name: hier.conformer().name().to_string(),
             residue_seq: hier.residue().id().0 as i32,
             chain_id: hier.chain().id().to_string(),
@@ -143,8 +143,8 @@ fn parse_sdf(text: &str) -> Result<Structure, ParseError> {
             .ok_or_else(|| ParseError::Sdf(format!("malformed atom line {}", k + 1)))?;
         atoms.push(Atom {
             serial: k + 1,
-            name: element.clone(),
-            element,
+            element: Element::from_symbol(&element),
+            name: element,
             residue_name: "LIG".into(),
             residue_seq: 1,
             chain_id: "A".into(),
@@ -321,7 +321,7 @@ mod tests {
         assert_eq!(s.num_hetero(), 1);
         let water = s.atoms.iter().find(|a| a.residue_name == "HOH").unwrap();
         assert!(water.hetero);
-        assert_eq!(water.element, "O");
+        assert_eq!(water.element, Element::O);
     }
 
     /// Write `s` into a PDB line buffer starting at 1-indexed column `col`.
@@ -401,7 +401,7 @@ mod tests {
         let s = parse_str(DIPEPTIDE, InputFormat::Pdb).unwrap();
         let first = &s.atoms[0];
         assert_eq!(first.name, "N");
-        assert_eq!(first.element, "N");
+        assert_eq!(first.element, Element::N);
         assert_eq!(first.residue_name, "ALA");
         assert_eq!(first.residue_seq, 1);
         assert_eq!(first.chain_id, "A");

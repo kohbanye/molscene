@@ -16,7 +16,7 @@ use crate::color::{
 use crate::scene::Scene;
 use crate::selection::evaluate;
 use crate::spec::RepresentationKind;
-use crate::structure::{vdw_radius, Atom, Structure};
+use crate::structure::{vdw_radius, Atom, Element, Structure};
 
 const DEFAULT_STICK_RADIUS: f32 = 0.25;
 const DEFAULT_SPHERE_SCALE: f32 = 1.0;
@@ -136,7 +136,7 @@ impl ColorCtx {
         match scheme {
             ColorScheme::Element => element_color(&atom.element),
             ColorScheme::ElementCarbon(carbon) => {
-                if atom.element.trim().eq_ignore_ascii_case("C") {
+                if atom.element == Element::C {
                     carbon
                 } else {
                     element_color(&atom.element)
@@ -663,7 +663,7 @@ mod tests {
         Atom {
             serial,
             name: name.into(),
-            element: elem.into(),
+            element: Element::from_symbol(elem),
             residue_name: "LIG".into(),
             residue_seq: 1,
             chain_id: "A".into(),

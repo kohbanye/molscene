@@ -722,9 +722,9 @@ mod tests {
             serial,
             name: name.into(),
             element: if name == "CA" {
-                "C".into()
+                crate::structure::Element::C
             } else {
-                name.into()
+                crate::structure::Element::from_symbol(name)
             },
             residue_name: "ALA".into(),
             residue_seq: seq,

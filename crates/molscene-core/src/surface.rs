@@ -347,7 +347,7 @@ mod tests {
         Atom {
             serial,
             name: "C".into(),
-            element: "C".into(),
+            element: crate::structure::Element::C,
             residue_name: "LIG".into(),
             residue_seq: 1,
             chain_id: "A".into(),
