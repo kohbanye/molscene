@@ -245,6 +245,11 @@ and aromatic rings (inner ring). ✅
   structures (10⁵+ atoms) smoothly; instancing budget checks.
 - **Benchmarks** (parse + geometry timings) → then "fast" is earned and goes in
   the README with numbers.
+- **Typed `Element`**: replace `Atom.element: String` with a type-safe `Element`
+  enum (no repeated trim/uppercase normalization, no `String` per atom, exhaustive
+  `match`, faster element comparisons). A cross-cutting refactor touching
+  `structure`/`parse`/`color`/`radii`/`selection` — lands on its own once the v0.6
+  surface settles, and is the precursor to the rigorous chemistry model (backlog).
 - Cheap reps: `lines`, `dots`, `labels`.
 - Water/solvent sensible defaults (don't dump crystal waters by accident).
 
@@ -281,10 +286,6 @@ Python.
 - **Alternative renderer**: a `wgpu` path for native, headless, offscreen PNG
   rendering (screenshots without a browser) — reuses the same `GeometrySpec`.
 - Richer mmCIF support; entity/chain metadata.
-- **Typed `Element`**: replace `Atom.element: String` with a type-safe `Element`
-  enum (no repeated trim/uppercase normalization, no `String` per atom, exhaustive
-  `match`). A cross-cutting refactor touching `structure`/`parse`/`color`/`radii`/
-  `selection`, so it lands on its own after the v0.6 surface settles.
 - **Rigorous chemistry model**: carry **valence**, **formal charge**, and
   **(implicit/explicit) hydrogen counts** on atoms, with real perception/
   sanitization (valence checks, charge balancing, aromaticity by electron count
