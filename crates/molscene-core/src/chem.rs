@@ -223,8 +223,8 @@ fn ring_max_deviation(ring: &[usize], structure: &Structure) -> f64 {
 }
 
 /// Classify a non-aromatic bond by how short it is relative to the expected
-/// single-bond length (sum of covalent radii). Only C/N/O/S pairs can be
-/// multiple; anything involving H (or other elements) stays single.
+/// single-bond length (sum of covalent radii). Only [`is_multi_capable`] pairs
+/// can be multiple; anything involving H (or other elements) stays single.
 fn order_by_length(structure: &Structure, i: usize, j: usize) -> BondOrder {
     let a = &structure.atoms[i];
     let b = &structure.atoms[j];
@@ -258,10 +258,13 @@ fn is_aromatic_element(element: &str) -> bool {
     )
 }
 
+/// Elements that can form a double/triple bond by the length heuristic. Beyond
+/// the organic C/N/O/S, this includes P (phosphoryl P=O in phosphates) and the
+/// other common π-forming p-block elements B/Se/As. H and metals stay single.
 fn is_multi_capable(element: &str) -> bool {
     matches!(
         element.trim().to_ascii_uppercase().as_str(),
-        "C" | "N" | "O" | "S"
+        "C" | "N" | "O" | "S" | "P" | "B" | "SE" | "AS"
     )
 }
 
@@ -347,6 +350,16 @@ mod tests {
         // A C=O at 1.23 Å is well under the expected single-bond length (1.42).
         let s = Structure::new(vec![atom("C", 0.0, 0.0, 0.0), atom("O", 1.23, 0.0, 0.0)]);
         assert_eq!(perceive(&s).bonds[0].order, BondOrder::Double);
+    }
+
+    #[test]
+    fn phosphoryl_perceived_double() {
+        // A phosphate P=O at ~1.48 Å is under the expected single bond (~1.73),
+        // so P must be multi-capable (a P–O ester at ~1.6 Å stays single).
+        let dbl = Structure::new(vec![atom("P", 0.0, 0.0, 0.0), atom("O", 1.48, 0.0, 0.0)]);
+        assert_eq!(perceive(&dbl).bonds[0].order, BondOrder::Double);
+        let single = Structure::new(vec![atom("P", 0.0, 0.0, 0.0), atom("O", 1.6, 0.0, 0.0)]);
+        assert_eq!(perceive(&single).bonds[0].order, BondOrder::Single);
     }
 
     #[test]

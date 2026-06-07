@@ -40,14 +40,24 @@ pub enum InputFormat {
     Sdf,
 }
 
+impl TryFrom<InputFormat> for Format {
+    type Error = ParseError;
+    fn try_from(f: InputFormat) -> Result<Self, Self::Error> {
+        match f {
+            InputFormat::Pdb => Ok(Format::Pdb),
+            InputFormat::Mmcif => Ok(Format::Mmcif),
+            // SDF never reaches pdbtbx — `parse_str` branches to `parse_sdf`.
+            InputFormat::Sdf => Err(ParseError::Sdf("SDF is not a pdbtbx format".into())),
+        }
+    }
+}
+
 /// Parse a structure from in-memory text.
 pub fn parse_str(text: &str, format: InputFormat) -> Result<Structure, ParseError> {
-    // SDF is hand-parsed; PDB/mmCIF go through pdbtbx.
-    let pdbtbx_format = match format {
-        InputFormat::Sdf => return parse_sdf(text),
-        InputFormat::Pdb => Format::Pdb,
-        InputFormat::Mmcif => Format::Mmcif,
-    };
+    if format == InputFormat::Sdf {
+        return parse_sdf(text);
+    }
+    let pdbtbx_format: Format = format.try_into()?;
     let reader = BufReader::new(text.as_bytes());
     let (pdb, _errors) = ReadOptions::new()
         .set_format(pdbtbx_format)
