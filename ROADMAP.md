@@ -72,9 +72,7 @@ These constrain every milestone below:
 
 - Transparency covers **mesh groups only** (surface / cartoon); instanced spheres
   and sticks are still opaque (per-instance alpha is a follow-up).
-- Bond inference is **O(n²)**; large structures will be slow.
 - Lighting is flat; single colors read muddy.
-- No benchmarks yet → no "fast" claims yet.
 
 ---
 
@@ -255,17 +253,52 @@ geometry/perception hot paths stop re-parsing strings.
 **Deliverable:** the element field is a typed `Element`; no behavior change — just
 type safety and fewer allocations/normalizations.
 
-## v0.7 — Rendering quality & performance
+## v0.7 — Performance: cell-grid bonds + benchmarks ✅ (shipped)
 
-- **Lighting/material polish**: hemisphere + fill lights, sensible defaults,
-  truer CPK colors; configurable background; antialiasing.
-- **Camera**: better initial framing, fit modes, `center`/`orient`.
-- **Performance**: replace O(n²) bonds with a **cell grid**; handle large
-  structures (10⁵+ atoms) smoothly; instancing budget checks.
-- **Benchmarks** (parse + geometry timings) → then "fast" is earned and goes in
-  the README with numbers.
-- Cheap reps: `lines`, `dots`, `labels`.
-- Water/solvent sensible defaults (don't dump crystal waters by accident).
+The original v0.7 ("Rendering quality & performance") bundled several unrelated
+efforts into one grab-bag. It is split so each piece is its own ~1-PR milestone
+(roughly ≤800 lines of diff); this first one tackles performance so "fast" can be
+earned before the polish work lands. The remaining pieces are **v0.7.1–v0.7.5**
+below.
+
+- **Performance**: replaced the O(n²) bond inference with a **uniform cell grid**
+  (`structure.rs`: `infer_bonds_grid`). Cells are sized to the worst-case bond
+  cutoff, so every bond lies within a 27-cell stencil — O(n) at realistic
+  molecular densities, with results byte-for-byte identical to the old all-pairs
+  scan (a kept `bonds_n2` oracle test pins this). Uses only `Vec`/`HashMap`, so it
+  stays WASM-safe.
+- **Benchmarks**: criterion benches (`benches/bond_inference.rs`,
+  `benches/geometry.rs`) over a deterministic 100 → 100k-atom lattice; run on
+  demand (`cargo bench`), not in CI. These earn the "fast" claim for the README.
+
+## v0.7.1 — Lighting & materials (~1 PR)
+
+- Hemisphere + fill lights, sensible defaults, truer CPK colors; configurable
+  background; antialiasing. Renderer-local (`viewer/`) plus a small optional
+  lighting/background channel on `GeometrySpec` — self-contained, one PR.
+
+## v0.7.2 — Camera framing (~1 PR)
+
+- Better initial framing, fit modes, `center` / `orient`. Scoped to `Camera`
+  (`spec.rs`) and the viewer's camera setup.
+
+## v0.7.3 — Cheap representations: lines & dots (~1 PR)
+
+- `lines` (thin bond lines) and `dots` (point clouds), reusing the existing
+  sticks/spheres geometry path and `GeometrySpec`. Grouped together since they
+  are the same kind of cheap rep and share the implementation.
+
+## v0.7.4 — Water/solvent defaults (~1 PR)
+
+- Sensible defaults so crystal waters aren't dumped into the view by accident.
+  Mostly selection defaults + docs — a small PR.
+
+## v0.7.5 — Labels & text annotations (~1 PR, heaviest)
+
+- Atom / residue labels drawn as Three.js sprites / `CanvasTexture` billboards,
+  driven by a new `labels` channel on `GeometrySpec`. Split out from the cheap-rep
+  line because it needs real text-rendering support in the renderer; sequenced
+  last in the v0.7.x line.
 
 ## v0.8 — WASM / pure-web
 

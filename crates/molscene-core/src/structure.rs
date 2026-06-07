@@ -6,6 +6,8 @@
 //! This module is parser-agnostic: `parse.rs` (pdbtbx) maps into these types so
 //! the rest of the core never depends on pdbtbx directly.
 
+use std::collections::HashMap;
+
 /// A chemical element, as a type-safe enum instead of a per-atom `String`.
 ///
 /// Covers the symbols molscene knows (those referenced by the radius/color
@@ -286,32 +288,101 @@ impl Structure {
     /// radii plus a tolerance, and above a small floor (to reject
     /// duplicate/overlapping atoms).
     ///
-    /// O(n²) for now — fine for typical single structures (~hundreds to a few
-    /// thousand atoms); a spatial grid can replace this for very large inputs.
+    /// When the structure carries explicit bonds (SDF/mol2), returns those
+    /// pairs; otherwise infers covalent bonds from interatomic distances via a
+    /// uniform cell grid ([`infer_bonds_grid`]) — O(n) at realistic molecular
+    /// densities, with results identical to the naive all-pairs scan.
     pub fn bonds(&self) -> Vec<(usize, usize)> {
         if let Some(bonds) = &self.explicit_bonds {
             return bonds.iter().map(|b| (b.a, b.b)).collect();
         }
-        const TOLERANCE: f64 = 0.45;
-        const FLOOR_SQ: f64 = 0.16; // (0.4 Å)²
-        let mut bonds = Vec::new();
-        for i in 0..self.atoms.len() {
-            let a = &self.atoms[i];
-            let ra = covalent_radius(&a.element);
-            for j in (i + 1)..self.atoms.len() {
-                let b = &self.atoms[j];
-                let cutoff = ra + covalent_radius(&b.element) + TOLERANCE;
-                let dx = a.x - b.x;
-                let dy = a.y - b.y;
-                let dz = a.z - b.z;
-                let d2 = dx * dx + dy * dy + dz * dz;
-                if d2 > FLOOR_SQ && d2 < cutoff * cutoff {
-                    bonds.push((i, j));
+        infer_bonds_grid(&self.atoms)
+    }
+}
+
+/// Tolerance (Å) added to the covalent-radius sum when testing for a bond.
+const BOND_TOLERANCE: f64 = 0.45;
+/// Squared minimum bond length (Å²); pairs closer than this are treated as
+/// duplicate/overlapping atoms and rejected. (0.4 Å)².
+const BOND_FLOOR_SQ: f64 = 0.16;
+
+/// Distance-based covalent bond inference via a uniform cell grid.
+///
+/// Two atoms bond when their separation is below the sum of their covalent radii
+/// plus [`BOND_TOLERANCE`] and above [`BOND_FLOOR_SQ`] (which rejects
+/// duplicate/overlapping atoms) — exactly the predicate of the old O(n²) scan.
+///
+/// The cell edge equals the largest possible bond cutoff
+/// (`2 * MAX_COVALENT_RADIUS + BOND_TOLERANCE`), so any bonded pair must lie
+/// within the 27-cell neighborhood of a cell. Bucketing atoms by cell and only
+/// scanning those neighbors makes this O(n) at realistic molecular densities
+/// instead of the naive all-pairs O(n²). Uses only `Vec`/`HashMap`, so it stays
+/// WASM-safe (no kiddo tree to rebuild per call).
+fn infer_bonds_grid(atoms: &[Atom]) -> Vec<(usize, usize)> {
+    if atoms.len() < 2 {
+        return Vec::new();
+    }
+    // Cell edge = worst-case bond cutoff, so bonds only ever span adjacent cells.
+    let cell = 2.0 * MAX_COVALENT_RADIUS + BOND_TOLERANCE;
+    // Bounding-box minimum, so coordinates map onto a grid anchored at the data
+    // (handles large/negative coordinates; i64 cells avoid overflow/negatives).
+    let mut min = (atoms[0].x, atoms[0].y, atoms[0].z);
+    for a in atoms {
+        min.0 = min.0.min(a.x);
+        min.1 = min.1.min(a.y);
+        min.2 = min.2.min(a.z);
+    }
+    let cell_of = |a: &Atom| -> (i64, i64, i64) {
+        (
+            ((a.x - min.0) / cell).floor() as i64,
+            ((a.y - min.1) / cell).floor() as i64,
+            ((a.z - min.2) / cell).floor() as i64,
+        )
+    };
+    // Bucket atom indices by cell.
+    let mut grid: HashMap<(i64, i64, i64), Vec<usize>> = HashMap::new();
+    for (i, a) in atoms.iter().enumerate() {
+        grid.entry(cell_of(a)).or_default().push(i);
+    }
+    let mut bonds = Vec::new();
+    // Iterate atoms in index order; the map is only ever looked up (never
+    // iterated), and the output is sorted below, so hasher order cannot leak
+    // into the result. Do NOT start iterating `grid` here — it would.
+    for i in 0..atoms.len() {
+        let a = &atoms[i];
+        let ra = covalent_radius(&a.element);
+        let (cx, cy, cz) = cell_of(a);
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                for dz in -1..=1 {
+                    let Some(bucket) = grid.get(&(cx + dx, cy + dy, cz + dz)) else {
+                        continue;
+                    };
+                    for &j in bucket {
+                        // Visit each unordered pair once, keeping i < j.
+                        if j <= i {
+                            continue;
+                        }
+                        let b = &atoms[j];
+                        let cutoff = ra + covalent_radius(&b.element) + BOND_TOLERANCE;
+                        let ddx = a.x - b.x;
+                        let ddy = a.y - b.y;
+                        let ddz = a.z - b.z;
+                        let d2 = ddx * ddx + ddy * ddy + ddz * ddz;
+                        if d2 > BOND_FLOOR_SQ && d2 < cutoff * cutoff {
+                            bonds.push((i, j));
+                        }
+                    }
                 }
             }
         }
-        bonds
     }
+    // Restore the exact (i, j) ascending order of the old all-pairs loop. The
+    // stencil visits pairs out of order; downstream code (chem.rs adjacency /
+    // SSSR, the insta geometry snapshots, strict-vector bond tests) depends on
+    // this deterministic ordering.
+    bonds.sort_unstable();
+    bonds
 }
 
 /// Van der Waals radius (Å) for an element; falls back to carbon's.
@@ -336,6 +407,14 @@ pub fn vdw_radius(element: &Element) -> f32 {
         _ => 1.70,
     }
 }
+
+/// Largest value in [`covalent_radius`]'s table (`Element::K`, 2.03 Å).
+///
+/// The cell-grid bond search ([`infer_bonds_grid`]) sizes its cells from this so
+/// the 27-cell stencil is guaranteed to contain every possible bond. A test
+/// (`max_covalent_radius_matches_table`) pins it to the actual table maximum, so
+/// adding a larger element can't silently shrink the cells and drop bonds.
+const MAX_COVALENT_RADIUS: f64 = 2.03;
 
 /// Covalent radius (Å) for an element (Cordero 2008); fallback ~carbon.
 pub fn covalent_radius(element: &Element) -> f64 {
@@ -440,6 +519,150 @@ mod tests {
     fn overlapping_atoms_do_not_bond() {
         let s = Structure::new(vec![carbon(1, 0.0, 0.0, 0.0), carbon(2, 0.05, 0.0, 0.0)]);
         assert!(s.bonds().is_empty());
+    }
+
+    /// The original naive all-pairs scan, kept as a correctness oracle for the
+    /// cell-grid implementation. Must stay byte-for-byte equivalent in result.
+    fn bonds_n2(atoms: &[Atom]) -> Vec<(usize, usize)> {
+        let mut bonds = Vec::new();
+        for i in 0..atoms.len() {
+            let a = &atoms[i];
+            let ra = covalent_radius(&a.element);
+            for j in (i + 1)..atoms.len() {
+                let b = &atoms[j];
+                let cutoff = ra + covalent_radius(&b.element) + BOND_TOLERANCE;
+                let dx = a.x - b.x;
+                let dy = a.y - b.y;
+                let dz = a.z - b.z;
+                let d2 = dx * dx + dy * dy + dz * dz;
+                if d2 > BOND_FLOOR_SQ && d2 < cutoff * cutoff {
+                    bonds.push((i, j));
+                }
+            }
+        }
+        bonds
+    }
+
+    fn assert_grid_matches_n2(atoms: &[Atom]) {
+        assert_eq!(infer_bonds_grid(atoms), bonds_n2(atoms));
+    }
+
+    #[test]
+    fn grid_matches_n2_collinear_chain() {
+        let atoms = vec![
+            carbon(1, 0.0, 0.0, 0.0),
+            carbon(2, 1.5, 0.0, 0.0),
+            carbon(3, 3.0, 0.0, 0.0),
+        ];
+        assert_grid_matches_n2(&atoms);
+    }
+
+    #[test]
+    fn grid_matches_n2_benzene_ring() {
+        // Flat hexagon, ~1.39 Å C-C edges.
+        let r = 1.39;
+        let mut atoms = Vec::new();
+        for k in 0..6 {
+            let theta = std::f64::consts::PI / 3.0 * k as f64;
+            atoms.push(carbon(k + 1, r * theta.cos(), r * theta.sin(), 0.0));
+        }
+        assert_grid_matches_n2(&atoms);
+    }
+
+    #[test]
+    fn grid_matches_n2_random_cloud() {
+        // Deterministic pseudo-random cloud via a tiny LCG (no rand dependency),
+        // spread so some pairs bond and most don't, crossing many cell borders.
+        let mut state: u64 = 0x1234_5678_9abc_def0;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (state >> 33) as f64 / (1u64 << 31) as f64 // [0, 1)
+        };
+        let mut atoms = Vec::new();
+        for k in 0..400 {
+            atoms.push(carbon(k + 1, next() * 20.0, next() * 20.0, next() * 20.0));
+        }
+        assert_grid_matches_n2(&atoms);
+    }
+
+    #[test]
+    fn grid_matches_n2_across_cell_boundaries() {
+        // A tight cluster placed so atoms straddle a cell boundary (cell edge is
+        // ~4.51 Å); bonds must still be found across the seam.
+        let mut atoms = Vec::new();
+        let mut serial = 1;
+        for gx in 0..3 {
+            for gy in 0..3 {
+                // Pairs ~1.5 Å apart, centered near multiples of the cell edge.
+                let base = gx as f64 * 4.51;
+                let y = gy as f64 * 4.51;
+                atoms.push(carbon(serial, base - 0.75, y, 0.0));
+                serial += 1;
+                atoms.push(carbon(serial, base + 0.75, y, 0.0));
+                serial += 1;
+            }
+        }
+        assert_grid_matches_n2(&atoms);
+    }
+
+    #[test]
+    fn grid_matches_n2_large_offset() {
+        // Same as the benzene case but translated far from the origin and into
+        // negative coordinates, exercising the bbox-relative i64 cell math.
+        let r = 1.39;
+        let mut atoms = Vec::new();
+        for k in 0..6 {
+            let theta = std::f64::consts::PI / 3.0 * k as f64;
+            atoms.push(carbon(
+                k + 1,
+                r * theta.cos() - 1000.0,
+                r * theta.sin() + 1000.0,
+                -500.0,
+            ));
+        }
+        assert_grid_matches_n2(&atoms);
+    }
+
+    #[test]
+    fn grid_empty_and_single_atom() {
+        assert!(infer_bonds_grid(&[]).is_empty());
+        assert!(infer_bonds_grid(&[carbon(1, 0.0, 0.0, 0.0)]).is_empty());
+    }
+
+    #[test]
+    fn max_covalent_radius_matches_table() {
+        // Pin MAX_COVALENT_RADIUS to the true table maximum across every known
+        // Element variant. If a larger element is added without updating the
+        // constant, the cell grid would shrink and silently miss bonds.
+        let elements = [
+            Element::H,
+            Element::B,
+            Element::C,
+            Element::N,
+            Element::O,
+            Element::F,
+            Element::Na,
+            Element::Mg,
+            Element::P,
+            Element::S,
+            Element::Cl,
+            Element::K,
+            Element::Ca,
+            Element::Fe,
+            Element::Zn,
+            Element::Se,
+            Element::As,
+            Element::Br,
+            Element::I,
+            Element::Other("Xx".into()),
+        ];
+        let table_max = elements
+            .iter()
+            .map(covalent_radius)
+            .fold(f64::MIN, f64::max);
+        assert_eq!(MAX_COVALENT_RADIUS, table_max);
     }
 
     #[test]

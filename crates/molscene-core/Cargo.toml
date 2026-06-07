@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Core engine for molscene: structure model, scene graph, selection, and JSON scene-spec serialization."
+# Only the explicitly-declared [[bench]] targets below; keeps benches/common.rs
+# a shared module (included via #[path]) rather than its own bench executable.
+autobenches = false
 
 [dependencies]
 serde = { workspace = true }
@@ -20,3 +23,13 @@ parse = ["dep:pdbtbx"]
 
 [dev-dependencies]
 insta = { version = "1", features = ["json"] }
+criterion = { version = "0.5", default-features = false, features = ["html_reports"] }
+
+# Benchmarks (run with `cargo bench -p molscene-core`; not part of CI).
+[[bench]]
+name = "bond_inference"
+harness = false
+
+[[bench]]
+name = "geometry"
+harness = false
