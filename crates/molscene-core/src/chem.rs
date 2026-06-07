@@ -30,6 +30,7 @@ pub struct Perception {
 /// Ideal aromatic rings are planar to < 0.05 Å; sp3 rings deviate > 0.3 Å.
 const PLANARITY_TOLERANCE: f64 = 0.10;
 /// Largest ring size considered (bounds SSSR cost; ignores macrocycles).
+/// TODO: Allow larger rings with a more efficient algorithm.
 const MAX_RING: usize = 7;
 
 /// Resolve the ordered bonds and rings for `structure`.
