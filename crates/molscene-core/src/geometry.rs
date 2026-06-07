@@ -399,7 +399,10 @@ impl BondCtx {
                 edge_ring.entry(edge(k)).or_insert(ri);
             }
             // A fully-aromatic ring is drawn as alternating single/double bonds
-            // (Kekulé): odd-position edges become singles, the rest doubles.
+            // (Kekulé): odd-position edges become singles, the rest doubles. This
+            // is exact for even rings (e.g. benzene); odd rings get an asymmetric
+            // split ((m-1)/2 singles vs (m+1)/2 doubles) — acceptable for the rare
+            // odd aromatic ring (e.g. cyclopentadienyl).
             let all_aromatic = (0..m)
                 .all(|k| order_of.get(&edge(k)) == Some(&crate::structure::BondOrder::Aromatic));
             if all_aromatic {
