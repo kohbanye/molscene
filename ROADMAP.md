@@ -285,6 +285,14 @@ Python.
   enum (no repeated trim/uppercase normalization, no `String` per atom, exhaustive
   `match`). A cross-cutting refactor touching `structure`/`parse`/`color`/`radii`/
   `selection`, so it lands on its own after the v0.6 surface settles.
+- **Rigorous chemistry model**: carry **valence**, **formal charge**, and
+  **(implicit/explicit) hydrogen counts** on atoms, with real perception/
+  sanitization (valence checks, charge balancing, aromaticity by electron count
+  rather than the v0.6 geometry heuristics). This is a proper cheminformatics
+  layer — likely its **own crate** (e.g. `molscene-chem`) that `molscene-core`
+  depends on — so the geometry/render path stays lean while molecule handling
+  gets stricter. Enables radii/H placement, protonation states, and
+  bond-order perception that doesn't rely on coordinates alone.
 
 ## Non-goals (for now)
 
