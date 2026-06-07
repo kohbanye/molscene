@@ -6,6 +6,104 @@
 //! This module is parser-agnostic: `parse.rs` (pdbtbx) maps into these types so
 //! the rest of the core never depends on pdbtbx directly.
 
+/// A chemical element, as a type-safe enum instead of a per-atom `String`.
+///
+/// Covers the symbols molscene knows (those referenced by the radius/color
+/// tables and the chemistry predicates); everything else falls into
+/// [`Element::Other`], which carries the *normalized* symbol (trimmed,
+/// uppercased) so arbitrary-symbol selections and display still work. Unknown
+/// symbols are resolved once at parse time via [`Element::from_symbol`], so the
+/// geometry/perception hot paths compare a cheap enum instead of re-parsing a
+/// string on every lookup.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Element {
+    H,
+    B,
+    C,
+    N,
+    O,
+    F,
+    Na,
+    Mg,
+    P,
+    S,
+    Cl,
+    K,
+    Ca,
+    Fe,
+    Zn,
+    Se,
+    As,
+    Br,
+    I,
+    /// Any symbol outside the known set, holding the normalized text.
+    Other(String),
+}
+
+impl Element {
+    /// Resolve an element symbol to a typed [`Element`]. This is the single
+    /// normalization point: the input is trimmed and uppercased, then matched to
+    /// a known variant or stored in [`Element::Other`]. An empty/missing symbol
+    /// becomes `Other("")`.
+    pub fn from_symbol(symbol: &str) -> Element {
+        match symbol.trim().to_ascii_uppercase().as_str() {
+            "H" => Element::H,
+            "B" => Element::B,
+            "C" => Element::C,
+            "N" => Element::N,
+            "O" => Element::O,
+            "F" => Element::F,
+            "NA" => Element::Na,
+            "MG" => Element::Mg,
+            "P" => Element::P,
+            "S" => Element::S,
+            "CL" => Element::Cl,
+            "K" => Element::K,
+            "CA" => Element::Ca,
+            "FE" => Element::Fe,
+            "ZN" => Element::Zn,
+            "SE" => Element::Se,
+            "AS" => Element::As,
+            "BR" => Element::Br,
+            "I" => Element::I,
+            other => Element::Other(other.to_string()),
+        }
+    }
+
+    /// The element's symbol (canonical capitalization for known variants, the
+    /// stored normalized text for [`Element::Other`]).
+    pub fn symbol(&self) -> &str {
+        match self {
+            Element::H => "H",
+            Element::B => "B",
+            Element::C => "C",
+            Element::N => "N",
+            Element::O => "O",
+            Element::F => "F",
+            Element::Na => "Na",
+            Element::Mg => "Mg",
+            Element::P => "P",
+            Element::S => "S",
+            Element::Cl => "Cl",
+            Element::K => "K",
+            Element::Ca => "Ca",
+            Element::Fe => "Fe",
+            Element::Zn => "Zn",
+            Element::Se => "Se",
+            Element::As => "As",
+            Element::Br => "Br",
+            Element::I => "I",
+            Element::Other(s) => s,
+        }
+    }
+}
+
+impl std::fmt::Display for Element {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.symbol())
+    }
+}
+
 /// A single atom.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Atom {
@@ -13,8 +111,8 @@ pub struct Atom {
     pub serial: usize,
     /// Atom name, e.g. `"CA"`.
     pub name: String,
-    /// Element symbol, e.g. `"C"`.
-    pub element: String,
+    /// Element, e.g. [`Element::C`].
+    pub element: Element,
     /// Residue (component) name, e.g. `"ALA"` / `"HOH"`.
     pub residue_name: String,
     /// Residue sequence number.
@@ -216,57 +314,53 @@ impl Structure {
     }
 }
 
-/// Van der Waals radius (Å) for an element symbol; falls back to carbon's.
-pub fn vdw_radius(element: &str) -> f32 {
-    match normalize(element).as_str() {
-        "H" => 1.10,
-        "C" => 1.70,
-        "N" => 1.55,
-        "O" => 1.52,
-        "S" => 1.80,
-        "P" => 1.80,
-        "F" => 1.47,
-        "CL" => 1.75,
-        "BR" => 1.85,
-        "I" => 1.98,
-        "FE" => 1.80,
-        "ZN" => 1.39,
-        "MG" => 1.73,
-        "NA" => 2.27,
-        "CA" => 2.31,
-        "K" => 2.75,
+/// Van der Waals radius (Å) for an element; falls back to carbon's.
+pub fn vdw_radius(element: &Element) -> f32 {
+    match element {
+        Element::H => 1.10,
+        Element::C => 1.70,
+        Element::N => 1.55,
+        Element::O => 1.52,
+        Element::S => 1.80,
+        Element::P => 1.80,
+        Element::F => 1.47,
+        Element::Cl => 1.75,
+        Element::Br => 1.85,
+        Element::I => 1.98,
+        Element::Fe => 1.80,
+        Element::Zn => 1.39,
+        Element::Mg => 1.73,
+        Element::Na => 2.27,
+        Element::Ca => 2.31,
+        Element::K => 2.75,
         _ => 1.70,
     }
 }
 
-/// Covalent radius (Å) for an element symbol (Cordero 2008); fallback ~carbon.
-pub fn covalent_radius(element: &str) -> f64 {
-    match normalize(element).as_str() {
-        "H" => 0.31,
-        "C" => 0.76,
-        "N" => 0.71,
-        "O" => 0.66,
-        "S" => 1.05,
-        "P" => 1.07,
-        "B" => 0.84,
-        "SE" => 1.20,
-        "AS" => 1.19,
-        "F" => 0.57,
-        "CL" => 1.02,
-        "BR" => 1.20,
-        "I" => 1.39,
-        "FE" => 1.32,
-        "ZN" => 1.22,
-        "MG" => 1.41,
-        "NA" => 1.66,
-        "CA" => 1.76,
-        "K" => 2.03,
+/// Covalent radius (Å) for an element (Cordero 2008); fallback ~carbon.
+pub fn covalent_radius(element: &Element) -> f64 {
+    match element {
+        Element::H => 0.31,
+        Element::C => 0.76,
+        Element::N => 0.71,
+        Element::O => 0.66,
+        Element::S => 1.05,
+        Element::P => 1.07,
+        Element::B => 0.84,
+        Element::Se => 1.20,
+        Element::As => 1.19,
+        Element::F => 0.57,
+        Element::Cl => 1.02,
+        Element::Br => 1.20,
+        Element::I => 1.39,
+        Element::Fe => 1.32,
+        Element::Zn => 1.22,
+        Element::Mg => 1.41,
+        Element::Na => 1.66,
+        Element::Ca => 1.76,
+        Element::K => 2.03,
         _ => 0.77,
     }
-}
-
-fn normalize(element: &str) -> String {
-    element.trim().to_ascii_uppercase()
 }
 
 #[cfg(test)]
@@ -277,7 +371,7 @@ mod tests {
         Atom {
             serial,
             name: "C".into(),
-            element: "C".into(),
+            element: Element::C,
             residue_name: "LIG".into(),
             residue_seq: 1,
             chain_id: "A".into(),
@@ -364,9 +458,18 @@ mod tests {
 
     #[test]
     fn radii_lookup_with_fallback() {
-        assert_eq!(vdw_radius("C"), 1.70);
-        assert_eq!(vdw_radius("o"), 1.52); // case-insensitive
-        assert_eq!(vdw_radius("Xx"), 1.70); // fallback
-        assert_eq!(covalent_radius("O"), 0.66);
+        assert_eq!(vdw_radius(&Element::C), 1.70);
+        assert_eq!(vdw_radius(&Element::from_symbol("o")), 1.52); // case-insensitive
+        assert_eq!(vdw_radius(&Element::from_symbol("Xx")), 1.70); // fallback
+        assert_eq!(covalent_radius(&Element::O), 0.66);
+    }
+
+    #[test]
+    fn element_from_symbol_normalizes() {
+        assert_eq!(Element::from_symbol(" c "), Element::C);
+        assert_eq!(Element::from_symbol("FE"), Element::Fe);
+        assert_eq!(Element::from_symbol("fe").symbol(), "Fe");
+        assert_eq!(Element::from_symbol("Xx"), Element::Other("XX".into()));
+        assert_eq!(Element::from_symbol("Xx").symbol(), "XX");
     }
 }

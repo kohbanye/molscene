@@ -236,7 +236,7 @@ sticks, as is conventional.)
 **Deliverable:** `ms.load("ligand.sdf").sticks()` renders correct double bonds
 and aromatic rings (inner ring). ✅
 
-## v0.6.1 — Typed `Element`
+## v0.6.1 — Typed `Element` ✅ (shipped)
 
 A small, focused follow-up to v0.6: replace `Atom.element: String` with a
 type-safe `Element` enum. No per-atom `String` and no repeated `trim`/uppercase

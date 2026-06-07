@@ -12,7 +12,7 @@
 
 use std::collections::{HashSet, VecDeque};
 
-use crate::structure::{covalent_radius, Bond, BondOrder, Structure};
+use crate::structure::{covalent_radius, Bond, BondOrder, Element, Structure};
 
 /// The perceived chemistry of a structure: ordered bonds plus the rings used to
 /// orient multi-bond and aromatic depictions.
@@ -252,20 +252,24 @@ fn order_by_length(structure: &Structure, i: usize, j: usize) -> BondOrder {
     }
 }
 
-fn is_aromatic_element(element: &str) -> bool {
-    matches!(
-        element.trim().to_ascii_uppercase().as_str(),
-        "C" | "N" | "O" | "S"
-    )
+fn is_aromatic_element(element: &Element) -> bool {
+    matches!(element, Element::C | Element::N | Element::O | Element::S)
 }
 
 /// Elements that can form a double/triple bond by the length heuristic. Beyond
 /// the organic C/N/O/S, this includes P (phosphoryl P=O in phosphates) and the
 /// other common π-forming p-block elements B/Se/As. H and metals stay single.
-fn is_multi_capable(element: &str) -> bool {
+fn is_multi_capable(element: &Element) -> bool {
     matches!(
-        element.trim().to_ascii_uppercase().as_str(),
-        "C" | "N" | "O" | "S" | "P" | "B" | "SE" | "AS"
+        element,
+        Element::C
+            | Element::N
+            | Element::O
+            | Element::S
+            | Element::P
+            | Element::B
+            | Element::Se
+            | Element::As
     )
 }
 
@@ -278,7 +282,7 @@ mod tests {
         Atom {
             serial: 0,
             name: element.into(),
-            element: element.into(),
+            element: Element::from_symbol(element),
             residue_name: "LIG".into(),
             residue_seq: 1,
             chain_id: "A".into(),

@@ -5,6 +5,8 @@
 //! "spectrum" rainbow, or a fixed named/hex color. Values follow PyMOL
 //! (`layer1/Color.cpp`). RGB components are floats in 0–1.
 
+use crate::structure::Element;
+
 /// RGB color, components in 0–1.
 pub type Rgb = [f32; 3];
 
@@ -101,21 +103,21 @@ impl ColorScheme {
     }
 }
 
-/// CPK color for an element symbol (PyMOL values); unknown → light grey.
-pub fn element_color(element: &str) -> Rgb {
-    match element.trim().to_ascii_uppercase().as_str() {
-        "C" => [0.2, 1.0, 0.2],
-        "N" => [0.2, 0.2, 1.0],
-        "O" => [1.0, 0.3, 0.3],
-        "H" => [0.9, 0.9, 0.9],
-        "S" => [0.9, 0.775, 0.25],
-        "P" => [1.0, 0.5, 0.0],
-        "FE" => [0.88, 0.40, 0.20],
-        "CL" => [0.1, 0.9, 0.1],
-        "NA" => [0.67, 0.36, 0.95],
-        "MG" => [0.54, 1.0, 0.0],
-        "ZN" => [0.49, 0.50, 0.69],
-        "CA" => [0.24, 1.0, 0.0],
+/// CPK color for an element (PyMOL values); unknown → light grey.
+pub fn element_color(element: &Element) -> Rgb {
+    match element {
+        Element::C => [0.2, 1.0, 0.2],
+        Element::N => [0.2, 0.2, 1.0],
+        Element::O => [1.0, 0.3, 0.3],
+        Element::H => [0.9, 0.9, 0.9],
+        Element::S => [0.9, 0.775, 0.25],
+        Element::P => [1.0, 0.5, 0.0],
+        Element::Fe => [0.88, 0.40, 0.20],
+        Element::Cl => [0.1, 0.9, 0.1],
+        Element::Na => [0.67, 0.36, 0.95],
+        Element::Mg => [0.54, 1.0, 0.0],
+        Element::Zn => [0.49, 0.50, 0.69],
+        Element::Ca => [0.24, 1.0, 0.0],
         _ => [0.8, 0.8, 0.8],
     }
 }
@@ -301,9 +303,10 @@ mod tests {
 
     #[test]
     fn cpk_element_colors() {
-        assert_eq!(element_color("C"), [0.2, 1.0, 0.2]);
-        assert_eq!(element_color("o"), [1.0, 0.3, 0.3]);
-        assert_eq!(element_color("Xx"), [0.8, 0.8, 0.8]); // fallback
+        assert_eq!(element_color(&Element::C), [0.2, 1.0, 0.2]);
+        assert_eq!(element_color(&Element::from_symbol("o")), [1.0, 0.3, 0.3]);
+        assert_eq!(element_color(&Element::from_symbol("Xx")), [0.8, 0.8, 0.8]);
+        // fallback
     }
 
     #[test]

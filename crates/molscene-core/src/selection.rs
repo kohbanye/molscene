@@ -18,7 +18,7 @@ use std::fmt;
 
 use kiddo::{KdTree, SquaredEuclidean};
 
-use crate::structure::{Atom, Structure};
+use crate::structure::{Atom, Element, Structure};
 
 const WATER_RESNAMES: [&str; 6] = ["HOH", "WAT", "H2O", "TIP3", "TIP", "SOL"];
 const BACKBONE_NAMES: [&str; 4] = ["N", "CA", "C", "O"];
@@ -116,7 +116,7 @@ pub enum Expr {
     // Single-clause predicates.
     Chain(String),
     ResName(String),
-    Element(String),
+    Element(Element),
     ResId(i32, i32), // inclusive [lo, hi]
     Numeric {
         field: NumField,
@@ -146,8 +146,8 @@ impl Expr {
     pub fn resn(name: impl Into<String>) -> Expr {
         Expr::ResName(name.into())
     }
-    pub fn element(symbol: impl Into<String>) -> Expr {
-        Expr::Element(symbol.into())
+    pub fn element(symbol: &str) -> Expr {
+        Expr::Element(Element::from_symbol(symbol))
     }
     /// Inclusive residue-number range `[lo, hi]` (use `lo == hi` for one residue).
     pub fn resi(lo: i32, hi: i32) -> Expr {
@@ -288,14 +288,14 @@ fn eval(expr: &Expr, structure: &Structure, ctx: &EvalCtx) -> Vec<bool> {
         Expr::Hetero => mask_from(&|a| a.hetero),
         Expr::Ligand => mask_from(&|a| a.hetero && !is_water(&a.residue_name)),
         Expr::Water => mask_from(&|a| is_water(&a.residue_name)),
-        Expr::Hydrogen => mask_from(&|a| a.element.eq_ignore_ascii_case("H")),
+        Expr::Hydrogen => mask_from(&|a| a.element == Element::H),
         Expr::Backbone => mask_from(&|a| !a.hetero && is_backbone(&a.name)),
-        Expr::Sidechain => mask_from(&|a| {
-            !a.hetero && !a.element.eq_ignore_ascii_case("H") && !is_backbone(&a.name)
-        }),
+        Expr::Sidechain => {
+            mask_from(&|a| !a.hetero && a.element != Element::H && !is_backbone(&a.name))
+        }
         Expr::Chain(c) => mask_from(&|a| a.chain_id == *c),
         Expr::ResName(name) => mask_from(&|a| a.residue_name.eq_ignore_ascii_case(name)),
-        Expr::Element(e) => mask_from(&|a| a.element.eq_ignore_ascii_case(e)),
+        Expr::Element(e) => mask_from(&|a| a.element == *e),
         Expr::ResId(lo, hi) => mask_from(&|a| a.residue_seq >= *lo && a.residue_seq <= *hi),
         Expr::Numeric { field, op, value } => mask_from(&|a| {
             let lhs = match field {
@@ -422,7 +422,7 @@ mod tests {
         Atom {
             serial: i,
             name: name.into(),
-            element: elem.into(),
+            element: Element::from_symbol(elem),
             residue_name: resn.into(),
             residue_seq: resi,
             chain_id: chain.into(),
@@ -440,7 +440,7 @@ mod tests {
         Atom {
             serial: i,
             name: elem.into(),
-            element: elem.into(),
+            element: Element::from_symbol(elem),
             residue_name: "LIG".into(),
             residue_seq: resi,
             chain_id: "A".into(),

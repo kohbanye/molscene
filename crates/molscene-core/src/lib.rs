@@ -26,5 +26,5 @@ pub use geometry::{Cylinders, GeometrySpec, Mesh, Spheres};
 pub use scene::Scene;
 pub use selection::{evaluate, CmpOp, Expr, NumField};
 pub use spec::{Camera, Representation, RepresentationKind, Source, StructureEntry, Style};
-pub use structure::{covalent_radius, vdw_radius, Atom, Bond, BondOrder, Ss, Structure};
+pub use structure::{covalent_radius, vdw_radius, Atom, Bond, BondOrder, Element, Ss, Structure};
 pub use surface::SurfaceParams;
