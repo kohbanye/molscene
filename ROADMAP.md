@@ -236,6 +236,25 @@ sticks, as is conventional.)
 **Deliverable:** `ms.load("ligand.sdf").sticks()` renders correct double bonds
 and aromatic rings (inner ring). ✅
 
+## v0.6.1 — Typed `Element`
+
+A small, focused follow-up to v0.6: replace `Atom.element: String` with a
+type-safe `Element` enum. No per-atom `String` and no repeated `trim`/uppercase
+normalization on every radius/color/predicate lookup — element comparisons become
+a cheap enum `match`, unknown symbols are resolved once at parse time, and the
+geometry/perception hot paths stop re-parsing strings.
+
+- **core**: an `Element` enum (the symbols molscene knows + an `Other` catch-all
+  for the rest); `covalent_radius` / `vdw_radius` / `color::element_color` and the
+  `chem` predicates (`is_multi_capable`, aromatic elements) key off it instead of
+  `&str`.
+- Cross-cutting but mechanical — touches `structure` / `parse` / `color` /
+  `selection`; the public string-based color grammar is unaffected.
+- The precursor to the **rigorous chemistry model** (backlog).
+
+**Deliverable:** the element field is a typed `Element`; no behavior change — just
+type safety and fewer allocations/normalizations.
+
 ## v0.7 — Rendering quality & performance
 
 - **Lighting/material polish**: hemisphere + fill lights, sensible defaults,
@@ -245,11 +264,6 @@ and aromatic rings (inner ring). ✅
   structures (10⁵+ atoms) smoothly; instancing budget checks.
 - **Benchmarks** (parse + geometry timings) → then "fast" is earned and goes in
   the README with numbers.
-- **Typed `Element`**: replace `Atom.element: String` with a type-safe `Element`
-  enum (no repeated trim/uppercase normalization, no `String` per atom, exhaustive
-  `match`, faster element comparisons). A cross-cutting refactor touching
-  `structure`/`parse`/`color`/`radii`/`selection` — lands on its own once the v0.6
-  surface settles, and is the precursor to the rigorous chemistry model (backlog).
 - Cheap reps: `lines`, `dots`, `labels`.
 - Water/solvent sensible defaults (don't dump crystal waters by accident).
 
