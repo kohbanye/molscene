@@ -38,6 +38,10 @@ class Scene:
     def from_inline_pdb(cls, pdb_text: str) -> Scene:
         return cls(_core.Scene.from_inline_pdb(pdb_text))
 
+    @classmethod
+    def from_inline_sdf(cls, sdf_text: str) -> Scene:
+        return cls(_core.Scene.from_inline_sdf(sdf_text))
+
     # -- representations ----------------------------------------------------
     def _add(
         self,

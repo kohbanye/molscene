@@ -38,11 +38,15 @@ def load(source: str) -> Scene:
     """Load a structure into a new :class:`Scene`.
 
     ``source`` may be a 4-character PDB id (downloaded from RCSB and parsed), or
-    a path to a local ``.pdb`` file (read and parsed). Coordinates are parsed in
-    Rust so the geometry can be generated natively.
+    a path to a local ``.pdb`` file, or a local ``.sdf`` / ``.mol`` molfile
+    (read and parsed, with explicit bond orders). Coordinates are parsed in Rust
+    so the geometry can be generated natively.
     """
     if os.path.exists(source):
         with open(source, encoding="utf-8") as fh:
-            return Scene.from_inline_pdb(fh.read())
+            text = fh.read()
+        if source.lower().endswith((".sdf", ".mol")):
+            return Scene.from_inline_sdf(text)
+        return Scene.from_inline_pdb(text)
     pdb_id = source.lower()
     return Scene.from_rcsb(pdb_id, _fetch_rcsb_pdb(pdb_id))
