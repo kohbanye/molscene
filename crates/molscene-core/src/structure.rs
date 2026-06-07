@@ -91,14 +91,28 @@ impl Structure {
 
     /// Attach explicit bonds with orders (from an SDF/mol2 import). Normalizes
     /// each pair to `a < b` so connectivity matches the distance-inferred order.
+    ///
+    /// # Panics
+    /// Panics if any bond is degenerate (`a == b`) or references an atom index
+    /// out of range — these would otherwise survive into the geometry/adjacency
+    /// pass and panic far from the cause.
     pub fn with_bonds(mut self, bonds: Vec<Bond>) -> Self {
+        let n = self.atoms.len();
         self.explicit_bonds = Some(
             bonds
                 .into_iter()
-                .map(|b| Bond {
-                    a: b.a.min(b.b),
-                    b: b.a.max(b.b),
-                    order: b.order,
+                .map(|b| {
+                    assert!(
+                        b.a != b.b && b.a < n && b.b < n,
+                        "with_bonds: invalid Bond {{ a: {}, b: {} }} for a structure with {n} atoms",
+                        b.a,
+                        b.b,
+                    );
+                    Bond {
+                        a: b.a.min(b.b),
+                        b: b.a.max(b.b),
+                        order: b.order,
+                    }
                 })
                 .collect(),
         );
@@ -301,6 +315,28 @@ mod tests {
         // Pair is normalized to (a < b) and replaces distance inference.
         assert_eq!(s.bonds(), vec![(0, 2)]);
         assert_eq!(s.explicit_bonds().unwrap()[0].order, BondOrder::Double);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid Bond")]
+    fn with_bonds_rejects_out_of_range_endpoint() {
+        Structure::new(vec![carbon(1, 0.0, 0.0, 0.0)]).with_bonds(vec![Bond {
+            a: 0,
+            b: 5,
+            order: BondOrder::Single,
+        }]);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid Bond")]
+    fn with_bonds_rejects_self_bond() {
+        Structure::new(vec![carbon(1, 0.0, 0.0, 0.0), carbon(2, 1.5, 0.0, 0.0)]).with_bonds(vec![
+            Bond {
+                a: 1,
+                b: 1,
+                order: BondOrder::Single,
+            },
+        ]);
     }
 
     #[test]

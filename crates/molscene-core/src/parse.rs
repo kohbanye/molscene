@@ -494,10 +494,10 @@ mod tests {
     #[test]
     fn rejects_truncated_sdf() {
         // Counts say 3 atoms but only one is present.
-        let atoms = vec![mol_atom(0.0, 0.0, 0.0, "C")];
+        let atom = mol_atom(0.0, 0.0, 0.0, "C");
         let mut text =
             String::from("title\n  prog\ncomment\n  3  0  0  0  0  0  0  0  0  0999 V2000\n");
-        text.push_str(&atoms[0]);
+        text.push_str(&atom);
         text.push('\n');
         let err = parse_str(&text, InputFormat::Sdf).unwrap_err();
         assert!(matches!(err, ParseError::Sdf(_)));
