@@ -30,11 +30,12 @@ def test_ethylene_double_bond_cylinders():
     assert len(geom["cylinders"]["starts"]) == 12
 
 
-def test_benzene_aromatic_inner_ring_cylinders():
-    # 6 aromatic ring bonds (each: full line + inner line = 2 lines) +
-    # 6 C–H single (1 line). (12 + 6) lines × 2 half-cylinders = 36 cylinders.
+def test_benzene_aromatic_drawn_kekule():
+    # Aromatic ring drawn Kekulé-style: 3 single + 3 double ring bonds, plus
+    # 6 C–H singles. (3 + 6 single = 9 lines → 18 cyl) + (3 double = 6 lines →
+    # 12 cyl) = 30 cylinders.
     geom = ms.load(BENZENE).sticks().to_geometry()
-    assert len(geom["cylinders"]["starts"]) == 36
+    assert len(geom["cylinders"]["starts"]) == 30
 
 
 def test_acetic_acid_has_a_double_bond():

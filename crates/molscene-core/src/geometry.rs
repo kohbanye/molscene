@@ -224,15 +224,17 @@ fn midpoint(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 
 // -- multi-bond geometry ----------------------------------------------------
 
-/// Half-distance between adjacent parallel cylinders of a double bond, ×radius.
-const DOUBLE_SEP: f32 = 1.0;
-/// Half-distance for the outer cylinders of a triple bond, ×radius.
-const TRIPLE_SEP: f32 = 1.5;
-/// Radius of the sub-cylinders in a multi/aromatic bond, ×radius (so a double
-/// isn't visually fatter than a single).
-const MULTI_RADIUS: f32 = 0.6;
-/// Inward offset of the aromatic inner-ring cylinder, ×radius.
-const AROMATIC_INNER: f32 = 1.6;
+/// Half-separation between the two equal lines of a double bond, ×radius.
+/// Aromatic ring doubles orient this perpendicular toward the ring centroid.
+const DOUBLE_SEP: f32 = 0.7;
+/// Half-separation for the two outer lines of a triple bond, ×radius.
+const TRIPLE_SEP: f32 = 1.0;
+/// Thickness of each line in a double/triple bond, ×radius — thinner than a
+/// single bond, and equal across the lines so a double reads as two even sticks.
+const LINE_RADIUS: f32 = 0.5;
+/// Atom/joint sphere radius in the sticks rep, ×radius — slightly larger than
+/// the bond so atoms read as rounded balls (ball-and-stick).
+const CAP_SCALE: f32 = 1.25;
 
 fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
@@ -263,9 +265,6 @@ fn normalize(a: [f32; 3]) -> [f32; 3] {
     } else {
         [0.0, 0.0, 0.0]
     }
-}
-fn lerp(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
-    add(scale(a, 1.0 - t), scale(b, t))
 }
 
 /// A unit vector perpendicular to the `pa→pb` axis, lying in the plane defined
@@ -309,8 +308,24 @@ fn push_segment(
     cyl.colors.push(cb);
 }
 
+/// One thin line parallel to the bond, shifted by `o`, at the multi-bond
+/// line radius (a two-color half-cylinder pair).
+fn push_offset_line(
+    cyl: &mut Cylinders,
+    pa: [f32; 3],
+    pb: [f32; 3],
+    radius: f32,
+    ca: Rgb,
+    cb: Rgb,
+    o: [f32; 3],
+) {
+    push_segment(cyl, add(pa, o), add(pb, o), radius * LINE_RADIUS, ca, cb);
+}
+
 /// Emit the cylinder(s) for one bond according to its order. `reference` orients
-/// the offset of multi/aromatic bonds (ring centroid or a neighbor atom).
+/// the perpendicular the multi-bond lines spread along (ring centroid or a
+/// neighbor atom). Aromatic bonds are resolved to `Single`/`Double` (Kekulé)
+/// before this point.
 #[allow(clippy::too_many_arguments)]
 fn emit_bond(
     cyl: &mut Cylinders,
@@ -325,50 +340,50 @@ fn emit_bond(
     use crate::structure::BondOrder::*;
     match order {
         Single => push_segment(cyl, pa, pb, radius, ca, cb),
-        Double => {
+        // Aromatic shouldn't reach here (the sticks loop maps it to a Kekulé
+        // single/double), but fall back to a double if it does.
+        Double | Aromatic => {
+            // Two equal thin lines straddling the bond axis.
             let o = scale(offset_dir(pa, pb, reference), radius * DOUBLE_SEP);
-            let rm = radius * MULTI_RADIUS;
-            push_segment(cyl, add(pa, o), add(pb, o), rm, ca, cb);
-            push_segment(cyl, sub(pa, o), sub(pb, o), rm, ca, cb);
+            push_offset_line(cyl, pa, pb, radius, ca, cb, o);
+            push_offset_line(cyl, pa, pb, radius, ca, cb, scale(o, -1.0));
         }
         Triple => {
+            // A central line plus two equal thin lines either side.
             let o = scale(offset_dir(pa, pb, reference), radius * TRIPLE_SEP);
-            let rm = radius * MULTI_RADIUS;
-            push_segment(cyl, pa, pb, rm, ca, cb);
-            push_segment(cyl, add(pa, o), add(pb, o), rm, ca, cb);
-            push_segment(cyl, sub(pa, o), sub(pb, o), rm, ca, cb);
-        }
-        Aromatic => {
-            // A full single bond plus a shorter cylinder offset toward the ring
-            // interior — the classic inner-ring depiction.
-            push_segment(cyl, pa, pb, radius, ca, cb);
-            let o = scale(offset_dir(pa, pb, reference), radius * AROMATIC_INNER);
-            let inner_start = add(lerp(pa, pb, 0.2), o);
-            let inner_end = add(lerp(pa, pb, 0.8), o);
-            push_segment(cyl, inner_start, inner_end, radius * MULTI_RADIUS, ca, cb);
+            push_offset_line(cyl, pa, pb, radius, ca, cb, [0.0, 0.0, 0.0]);
+            push_offset_line(cyl, pa, pb, radius, ca, cb, o);
+            push_offset_line(cyl, pa, pb, radius, ca, cb, scale(o, -1.0));
         }
     }
 }
 
-/// Precomputed lookup for orienting multi/aromatic bond offsets: ring centroids
-/// keyed by edge, plus atom positions and adjacency for the neighbor fallback.
+/// Precomputed lookup for orienting/depicting bonds: ring centroids keyed by
+/// edge, atom positions and adjacency for the neighbor fallback, and the Kekulé
+/// single-bond positions of aromatic rings.
 struct BondCtx {
     positions: Vec<[f32; 3]>,
     adj: Vec<Vec<usize>>,
     centroids: Vec<[f32; 3]>,
     edge_ring: HashMap<(usize, usize), usize>,
+    /// Aromatic ring edges that the Kekulé alternation draws as a *single* bond;
+    /// the remaining aromatic edges are drawn as doubles.
+    kekule_single: std::collections::HashSet<(usize, usize)>,
 }
 
 impl BondCtx {
     fn new(structure: &Structure, perc: &crate::chem::Perception) -> Self {
         let positions: Vec<[f32; 3]> = structure.atoms.iter().map(pos).collect();
         let mut adj = vec![Vec::new(); structure.atoms.len()];
+        let mut order_of = HashMap::new();
         for bond in &perc.bonds {
             adj[bond.a].push(bond.b);
             adj[bond.b].push(bond.a);
+            order_of.insert((bond.a.min(bond.b), bond.a.max(bond.b)), bond.order);
         }
         let mut centroids = Vec::with_capacity(perc.rings.len());
         let mut edge_ring = HashMap::new();
+        let mut kekule_single = std::collections::HashSet::new();
         for (ri, ring) in perc.rings.iter().enumerate() {
             let mut c = [0.0f32; 3];
             for &i in ring {
@@ -376,10 +391,21 @@ impl BondCtx {
             }
             centroids.push(scale(c, 1.0 / ring.len() as f32));
             let m = ring.len();
+            let edge = |k: usize| {
+                let (a, b) = (ring[k], ring[(k + 1) % m]);
+                (a.min(b), a.max(b))
+            };
             for k in 0..m {
-                let a = ring[k];
-                let b = ring[(k + 1) % m];
-                edge_ring.entry((a.min(b), a.max(b))).or_insert(ri);
+                edge_ring.entry(edge(k)).or_insert(ri);
+            }
+            // A fully-aromatic ring is drawn as alternating single/double bonds
+            // (Kekulé): odd-position edges become singles, the rest doubles.
+            let all_aromatic = (0..m)
+                .all(|k| order_of.get(&edge(k)) == Some(&crate::structure::BondOrder::Aromatic));
+            if all_aromatic {
+                for k in (1..m).step_by(2) {
+                    kekule_single.insert(edge(k));
+                }
             }
         }
         Self {
@@ -387,6 +413,7 @@ impl BondCtx {
             adj,
             centroids,
             edge_ring,
+            kekule_single,
         }
     }
 
@@ -403,6 +430,12 @@ impl BondCtx {
             return Some(self.positions[k]);
         }
         None
+    }
+
+    /// Whether an aromatic edge is drawn as a single bond by the Kekulé
+    /// alternation. Aromatic edges not on a detected ring default to a double.
+    fn aromatic_is_single(&self, i: usize, j: usize) -> bool {
+        self.kekule_single.contains(&(i.min(j), i.max(j)))
     }
 }
 
@@ -457,22 +490,32 @@ impl Scene {
                     let perc: &crate::chem::Perception =
                         perception.get_or_insert_with(|| crate::chem::perceive(structure));
                     let bond_ctx = BondCtx::new(structure, perc);
-                    // Each bond becomes one or more half-cylinders (split at the
-                    // bond midpoint, colored by each end atom) per its order:
-                    // single → 1 line, double → 2, triple → 3, aromatic → a full
-                    // line plus an inner ring-ward line.
+                    // Each bond becomes half-cylinders (split at the midpoint,
+                    // colored by each end atom): single → 1 line, double → 2,
+                    // triple → 3. Aromatic rings are drawn Kekulé-style, each
+                    // edge resolved to a single or an inner-offset double.
                     for bond in &perc.bonds {
                         let (i, j) = (bond.a, bond.b);
                         if !selected.contains(&i) || !selected.contains(&j) {
                             continue;
                         }
+                        let order = match bond.order {
+                            crate::structure::BondOrder::Aromatic => {
+                                if bond_ctx.aromatic_is_single(i, j) {
+                                    crate::structure::BondOrder::Single
+                                } else {
+                                    crate::structure::BondOrder::Double
+                                }
+                            }
+                            other => other,
+                        };
                         let a = &structure.atoms[i];
                         let b = &structure.atoms[j];
                         let (pa, pb) = (pos(a), pos(b));
                         let (ca, cb) = (color_at(i, a), color_at(j, b));
                         emit_bond(
                             &mut g.cylinders,
-                            bond.order,
+                            order,
                             pa,
                             pb,
                             radius,
@@ -481,11 +524,12 @@ impl Scene {
                             bond_ctx.reference(i, j),
                         );
                     }
-                    // Rounded joints / lone atoms: a sphere at each selected atom.
+                    // Rounded joints / lone atoms: a sphere (slightly larger than
+                    // the bond) at each selected atom — a ball-and-stick look.
                     for &i in &indices {
                         let a = &structure.atoms[i];
                         g.spheres.centers.push(pos(a));
-                        g.spheres.radii.push(radius);
+                        g.spheres.radii.push(radius * CAP_SCALE);
                         g.spheres.colors.push(color_at(i, a));
                     }
                 }
@@ -655,10 +699,10 @@ mod tests {
         // one bond -> two half cylinders
         assert_eq!(g.cylinders.starts.len(), 2);
         assert_eq!(g.cylinders.radii, vec![0.25, 0.25]);
-        // cap sphere at each selected atom
+        // cap sphere at each selected atom, slightly larger than the bond
         assert_eq!(g.spheres.centers.len(), 2);
-        assert_eq!(g.spheres.radii, vec![0.25, 0.25]);
-        // half cylinder meets at the midpoint (0.75, 0, 0)
+        assert_eq!(g.spheres.radii, vec![0.3125, 0.3125]); // 0.25 * CAP_SCALE
+                                                           // half cylinder meets at the midpoint (0.75, 0, 0)
         assert_eq!(g.cylinders.ends[0], [0.75, 0.0, 0.0]);
         assert_eq!(g.cylinders.starts[1], [0.75, 0.0, 0.0]);
     }
@@ -680,8 +724,8 @@ mod tests {
     #[test]
     fn bond_order_drives_cylinder_count() {
         use crate::structure::BondOrder::*;
-        // single → 1 line (2 half-cylinders), double → 2 lines (4),
-        // triple → 3 lines (6), aromatic → full line + inner line (4).
+        // single → 1 line (2 half-cylinders), double → 2 lines (4), triple → 3
+        // lines (6). A lone aromatic bond (no ring) defaults to a double (4).
         assert_eq!(cylinder_count_for(diatomic(Single)), 2);
         assert_eq!(cylinder_count_for(diatomic(Double)), 4);
         assert_eq!(cylinder_count_for(diatomic(Triple)), 6);
@@ -689,9 +733,10 @@ mod tests {
     }
 
     #[test]
-    fn aromatic_ring_emits_inner_ring_cylinders() {
-        // A planar hexagon of carbons with explicit aromatic bonds: 6 bonds ×
-        // (full line + inner line) × 2 half-cylinders = 24 cylinders.
+    fn aromatic_ring_is_drawn_kekule() {
+        // A hexagon of carbons with explicit aromatic bonds is drawn as
+        // alternating single/double (Kekulé): 3 singles (2 cyl) + 3 doubles
+        // (4 cyl) = 6 + 12 = 18 cylinders.
         use crate::structure::{Bond, BondOrder};
         let r = 1.39;
         let mut atoms = Vec::new();
@@ -708,7 +753,7 @@ mod tests {
             });
         }
         let st = Structure::new(atoms).with_bonds(bonds);
-        assert_eq!(cylinder_count_for(st), 24);
+        assert_eq!(cylinder_count_for(st), 18);
     }
 
     #[test]
