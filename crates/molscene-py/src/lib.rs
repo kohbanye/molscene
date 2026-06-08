@@ -21,6 +21,7 @@ fn parse_kind(kind: &str) -> PyResult<RepresentationKind> {
         "spheres" => RepresentationKind::Spheres,
         "lines" => RepresentationKind::Lines,
         "dots" => RepresentationKind::Dots,
+        "labels" => RepresentationKind::Labels,
         other => {
             return Err(PyValueError::new_err(format!(
                 "unknown representation kind: {other:?}"
@@ -72,7 +73,8 @@ impl Scene {
     }
 
     /// Add a representation over `selection` with optional typed style.
-    #[pyo3(signature = (kind, selection, color=None, opacity=None, scale=None, radius=None))]
+    #[allow(clippy::too_many_arguments)] // one keyword per style field, by design
+    #[pyo3(signature = (kind, selection, color=None, opacity=None, scale=None, radius=None, text=None))]
     fn representation(
         &mut self,
         kind: &str,
@@ -81,6 +83,7 @@ impl Scene {
         opacity: Option<f64>,
         scale: Option<f64>,
         radius: Option<f64>,
+        text: Option<String>,
     ) -> PyResult<()> {
         let kind = parse_kind(kind)?;
         let style = Style {
@@ -88,6 +91,7 @@ impl Scene {
             opacity: opacity.map(|v| v as f32),
             scale: scale.map(|v| v as f32),
             radius: radius.map(|v| v as f32),
+            text,
         };
         let sel = selection.expr.clone();
         match kind {
@@ -97,6 +101,7 @@ impl Scene {
             RepresentationKind::Spheres => self.inner.spheres(sel, style),
             RepresentationKind::Lines => self.inner.lines(sel, style),
             RepresentationKind::Dots => self.inner.dots(sel, style),
+            RepresentationKind::Labels => self.inner.labels(sel, style),
         };
         Ok(())
     }

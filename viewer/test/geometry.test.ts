@@ -5,6 +5,7 @@ import {
   fitDistance,
   flattenVec3,
   isTransparent,
+  labelSpriteScale,
   quaternionFromYTo,
   type GeometrySpec,
 } from "../src/geometry";
@@ -106,6 +107,25 @@ describe("flattenVec3", () => {
 
   it("returns an empty array for no vertices", () => {
     expect(flattenVec3([]).length).toBe(0);
+  });
+});
+
+describe("labelSpriteScale", () => {
+  it("anchors the height to the font size and preserves the canvas aspect", () => {
+    // A 200x100 canvas at size 1: height is the base, width keeps the 2:1 aspect.
+    const [w, h] = labelSpriteScale(200, 100, 1);
+    expect(w / h).toBeCloseTo(2, 4);
+  });
+
+  it("scales linearly with the font size", () => {
+    const [, h1] = labelSpriteScale(200, 100, 1);
+    const [, h2] = labelSpriteScale(200, 100, 2);
+    expect(h2).toBeCloseTo(h1 * 2, 4);
+  });
+
+  it("falls back to a square aspect for a zero-height canvas", () => {
+    const [w, h] = labelSpriteScale(200, 0, 1);
+    expect(w).toBeCloseTo(h, 4);
   });
 });
 
