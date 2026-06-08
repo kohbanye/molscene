@@ -13,6 +13,8 @@ FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "dipeptide.pdb")
 # dipeptide.pdb: 10 atoms (ALA 5 + GLY 4 + HOH 1), 1 water (HETATM).
 HELIX_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "helix.pdb")
 # helix.pdb: 12-residue ideal alpha-helix (N/CA/C/O) with a HELIX annotation.
+SOLVATED_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "solvated.pdb")
+# solvated.pdb: 9 protein atoms + 1 HOH water + 1 NA ion (11 total).
 
 
 def build_scene():
@@ -52,8 +54,18 @@ def test_all_includes_water():
 
 
 def test_default_selections_apply():
-    # spheres defaults to all (10), sticks to ligand (none in this fixture).
-    assert len(ms.load(FIXTURE).spheres().to_geometry()["spheres"]["centers"]) == 10
+    # spheres defaults to "everything but solvent": 9 protein atoms, the HOH water
+    # excluded (sticks defaults to ligand — none in this fixture).
+    assert len(ms.load(FIXTURE).spheres().to_geometry()["spheres"]["centers"]) == 9
+
+
+def test_spheres_default_excludes_water_and_ions():
+    # solvated.pdb: 9 protein + 1 water + 1 ion. The default drops water and ions.
+    geom = ms.load(SOLVATED_FIXTURE).spheres().to_geometry()
+    assert len(geom["spheres"]["centers"]) == 9
+    # ...but an explicit all() still shows every atom (defaults never override intent).
+    all_geom = ms.load(SOLVATED_FIXTURE).spheres(ms.select.all()).to_geometry()
+    assert len(all_geom["spheres"]["centers"]) == 11
 
 
 def test_sticks_generate_cylinders():
