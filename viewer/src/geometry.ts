@@ -31,9 +31,48 @@ export interface Mesh {
   opacity: number;
 }
 
+/**
+ * Camera framing as an oriented box. `right`/`up` are the unit screen basis; the
+ * view direction is `right × up`. `extent` are the half-widths along
+ * `(right, up, forward)`, so the renderer can fit tightly per axis.
+ */
 export interface GeomCamera {
   center: Vec3;
-  radius: number;
+  right: Vec3;
+  up: Vec3;
+  extent: Vec3;
+}
+
+/**
+ * Distance from the box center at which the oriented box just fills the frustum,
+ * accounting for the viewport aspect ratio (so wide or tall viewports never
+ * clip). `extent` is `[half-width, half-height, half-depth]`; `aspect` is
+ * width/height; `fovDeg` is the vertical field of view.
+ */
+export function fitDistance(
+  extent: Vec3,
+  aspect: number,
+  fovDeg: number,
+): number {
+  // Guard against a degenerate viewport/FOV (e.g. zero-height container) that
+  // would make tan blow up to Infinity/NaN and fling the camera to nowhere.
+  if (!(aspect > 0) || !(fovDeg > 0 && fovDeg < 180)) {
+    return extent[2] + Math.max(extent[0], extent[1], 1);
+  }
+  const tanV = Math.tan((fovDeg * Math.PI) / 360);
+  const tanH = tanV * aspect;
+  const distV = extent[1] / tanV + extent[2];
+  const distH = extent[0] / tanH + extent[2];
+  return Math.max(distV, distH);
+}
+
+/** Right-handed cross product `a × b`. */
+export function cross(a: Vec3, b: Vec3): Vec3 {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
 }
 
 export interface GeometrySpec {

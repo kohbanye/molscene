@@ -118,6 +118,14 @@ impl Scene {
         self
     }
 
+    /// Orient the view along a selection's principal axes (PyMOL-style
+    /// `orient`): its longest dimension is laid out horizontally, the next
+    /// vertically. Also frames the selection unless `center` overrides it.
+    pub fn orient(&mut self, selection: Expr) -> &mut Self {
+        self.camera.orient = Some(selection);
+        self
+    }
+
     /// Override the color of a sub-selection, on top of the representations'
     /// schemes. Applied in call order (last write wins) at geometry time.
     pub fn set_color(&mut self, selection: Expr, color: &str) -> &mut Self {
@@ -206,6 +214,7 @@ mod tests {
         let scene = Scene::from_rcsb("1ubq");
         assert!(scene.camera().auto);
         assert_eq!(scene.camera().center, None);
+        assert_eq!(scene.camera().orient, None);
     }
 
     #[test]
@@ -213,6 +222,13 @@ mod tests {
         let mut scene = Scene::from_rcsb("1ubq");
         scene.center(Expr::Ligand);
         assert_eq!(scene.camera().center, Some(Expr::Ligand));
+    }
+
+    #[test]
+    fn orient_sets_camera_axes() {
+        let mut scene = Scene::from_rcsb("1ubq");
+        scene.orient(Expr::Protein);
+        assert_eq!(scene.camera().orient, Some(Expr::Protein));
     }
 
     #[test]

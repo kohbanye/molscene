@@ -104,7 +104,21 @@ expression: scene.to_geometry()
       0.0,
       0.0
     ],
-    "radius": 3.0
+    "right": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "up": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "extent": [
+      3.0,
+      3.0,
+      3.0
+    ]
   },
   "background": [
     1.0,

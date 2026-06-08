@@ -99,8 +99,22 @@ class Scene:
         return self._add("spheres", sel, color=color, opacity=opacity, scale=scale)
 
     def center(self, selection: Selection | None = None) -> Scene:
+        """Frame the view on a selection (still auto-fits the zoom)::
+
+        ms.load("1ubq").cartoon().center(ms.select.resi(50))
+        """
         if selection is not None:
             self._core.set_center(_coerce(selection))
+        return self
+
+    def orient(self, selection: Selection | None = None) -> Scene:
+        """Orient the view along a selection's principal axes (PyMOL-style
+        ``orient``): its longest dimension goes horizontal, the next vertical::
+
+            ms.load("1ubq").cartoon().orient(ms.select.protein())
+        """
+        if selection is not None:
+            self._core.set_orient(_coerce(selection))
         return self
 
     def set_color(self, selection: Selection, color: str) -> Scene:

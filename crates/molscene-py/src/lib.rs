@@ -102,6 +102,11 @@ impl Scene {
         self.inner.center(selection.expr.clone());
     }
 
+    /// Orient the view along a selection's principal axes.
+    fn set_orient(&mut self, selection: &Selection) {
+        self.inner.orient(selection.expr.clone());
+    }
+
     /// Override the color of a sub-selection (applied on top of the
     /// representations' schemes, in call order).
     fn set_color(&mut self, selection: &Selection, color: &str) {

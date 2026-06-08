@@ -7,6 +7,8 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import {
   buildInstances,
+  cross,
+  fitDistance,
   flattenVec3,
   type GeometrySpec,
   type Instance,
@@ -120,18 +122,22 @@ export function renderGeometry(
   fill.position.set(-1, 0.5, -0.5);
   scene.add(fill);
 
-  // Camera fit to the bounding sphere.
-  const { center, radius } = spec.camera;
+  // Camera fit to the oriented bounding box (aspect-aware, tight per axis).
+  const { center, right, up, extent } = spec.camera;
   const fov = 45;
-  const camera = new THREE.PerspectiveCamera(
-    fov,
-    width / height,
-    0.1,
-    radius * 100 + 100,
-  );
+  const aspect = width / height;
+  const distance = fitDistance(extent, aspect, fov);
+  // View direction (from the box toward the camera) = right × up.
+  const forward = cross(right, up);
+  const far = distance + Math.hypot(extent[0], extent[1], extent[2]);
+  const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, far * 2 + 100);
   const target = new THREE.Vector3(center[0], center[1], center[2]);
-  const distance = radius / Math.sin((fov * Math.PI) / 360);
-  camera.position.set(center[0], center[1], center[2] + distance);
+  camera.up.set(up[0], up[1], up[2]);
+  camera.position.set(
+    center[0] + forward[0] * distance,
+    center[1] + forward[1] * distance,
+    center[2] + forward[2] * distance,
+  );
   camera.lookAt(target);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });

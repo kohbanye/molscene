@@ -67,11 +67,16 @@ pub struct ColorAssignment {
     pub color: String,
 }
 
-/// Camera state. Auto zoom-to-fit, optionally centered on a selection.
+/// Camera state. Auto zoom-to-fit, optionally centered on a selection and/or
+/// oriented so a selection's principal axes align with the screen.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Camera {
     pub auto: bool,
+    /// Frame (and translate the view to) this selection instead of all atoms.
     pub center: Option<Expr>,
+    /// Orient the view along this selection's principal axes (PCA): its longest
+    /// dimension goes horizontal, the next vertical (PyMOL-style `orient`).
+    pub orient: Option<Expr>,
 }
 
 impl Default for Camera {
@@ -79,6 +84,7 @@ impl Default for Camera {
         Self {
             auto: true,
             center: None,
+            orient: None,
         }
     }
 }
