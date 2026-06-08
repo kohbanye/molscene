@@ -124,7 +124,7 @@ class Scene:
     ) -> Scene:
         """A point cloud: a small sphere per atom (cheaper than ``spheres``)::
 
-            ms.load("1ubq").dots(ms.select.protein())
+        ms.load("1ubq").dots(ms.select.protein())
         """
         sel = selection if selection is not None else select.all()
         return self._add("dots", sel, color=color, opacity=opacity, scale=scale)
