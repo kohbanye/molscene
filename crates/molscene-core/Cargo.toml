@@ -12,7 +12,18 @@ autobenches = false
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-pdbtbx = { version = "0.12", optional = true }
+# Drop pdbtbx's optional rayon/rstar/serde (all unused — we only use the base
+# `ReadOptions::read_raw` + hierarchy API, never the rayon `par_iter` methods).
+# `rayon` is the one thread-dependent blocker for wasm; removing it lets pdbtbx
+# compile to `wasm32`, so the whole `parse` path works in the browser without a
+# hand-written PDB parser. `compression` is kept on: pdbtbx 0.12 won't compile
+# without it (its decompress fields are not feature-gated), and its flate2 backend
+# (miniz_oxide) is pure Rust and WASM-safe.
+pdbtbx = { version = "0.12", optional = true, default-features = false, features = [
+    "compression",
+] }
+# kiddo is WASM-safe: it gates its `generator` (cc/libc) dependency to
+# x86_64/aarch64 only, so wasm builds drop it. Keep `default-features = false`.
 kiddo = { version = "5", default-features = false }
 fast-surface-nets = "0.2"
 

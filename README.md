@@ -46,6 +46,20 @@ color) in Rust and treats the renderer as a dumb 3D canvas. v0.1 renders
 - **`python/molscene`** — thin fluent facade, notebook display.
 - **`viewer/`** — Three.js adapter that draws a `GeometrySpec` (instanced meshes).
 
+## Pure-web / WASM
+
+The same Rust core runs in the browser — zero Python. `molscene-wasm` exposes the
+identical `Scene` / `Selection` API via wasm-bindgen, builds the scene and compiles
+`to_geometry` entirely in WebAssembly, and hands the resulting `GeometrySpec` (the
+only wire format, byte-for-byte the same one the notebook path uses) to the existing
+Three.js viewer. PDB / mmCIF / SDF all parse in the browser. See
+[`web/README.md`](web/README.md):
+
+```sh
+./web/build.sh                 # builds the viewer bundle + the WASM core
+python3 -m http.server 8000    # then open http://localhost:8000/web/index.html
+```
+
 ## Development
 
 ```sh
@@ -61,9 +75,10 @@ maturin develop && pytest -m "not network"
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md). Today molscene renders **spheres** and **sticks**
-natively and evaluates a **typed, composable selection API** (boolean, spatial,
-aggregation, numeric) in Rust; cartoon, surface, and a pure-web WASM path are next.
+See [ROADMAP.md](ROADMAP.md). Today molscene renders **spheres**, **sticks**,
+**cartoon**, and **surface** natively, evaluates a **typed, composable selection
+API** (boolean, spatial, aggregation, numeric) in Rust, and runs the same core in
+the browser via **WebAssembly** (a pure-web path, zero Python).
 
 ## License
 

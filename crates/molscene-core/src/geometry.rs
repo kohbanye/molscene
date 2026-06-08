@@ -1189,4 +1189,34 @@ mod tests {
         assert_eq!(g.spheres.colors[0], [1.0, 0.0, 0.0]); // overridden
         assert_eq!(g.spheres.colors[1], [0.5, 0.5, 0.5]); // base grey
     }
+
+    /// End-to-end: the exact `from_sdf` → `to_geometry_json` pipeline the WASM
+    /// demo drives in the browser. Guards that inline-SDF parsing + the sticks
+    /// geometry path stay wired together (the path most likely to silently break
+    /// when the parser feature flags are reshuffled).
+    #[cfg(feature = "parse")]
+    #[test]
+    fn from_sdf_compiles_to_stick_geometry_json() {
+        use crate::spec::Source;
+        // Ethylene: C=C double bond plus four C–H singles.
+        let sdf = "ethylene\n  molscene\n\n  6  5  0  0  0  0  0  0  0  0999 V2000\n\
+            0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n\
+            1.3300    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n\
+           -0.5000    0.9300    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n\
+           -0.5000   -0.9300    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n\
+            1.8300    0.9300    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n\
+            1.8300   -0.9300    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n\
+            1  2  2  0  0  0  0\n  1  3  1  0  0  0  0\n  1  4  1  0  0  0  0\n\
+            2  5  1  0  0  0  0\n  2  6  1  0  0  0  0\nM  END\n";
+        let mut scene = Scene::from_sdf(sdf, Source::InlineSdf { data: sdf.into() }).unwrap();
+        scene.sticks(Expr::All, colored("element"));
+        let g = scene.to_geometry();
+        // Bonds tessellate into cylinders and atoms into cap spheres — the spec
+        // the renderer consumes is non-empty.
+        assert!(!g.cylinders.starts.is_empty());
+        assert!(!g.spheres.centers.is_empty());
+        let json = scene.to_geometry_json();
+        assert!(json.contains("\"cylinders\""));
+        assert!(json.contains("\"spheres\""));
+    }
 }

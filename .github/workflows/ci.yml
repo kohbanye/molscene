@@ -33,6 +33,20 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  wasm:
+    name: WASM smoke build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Build the WASM core (PDB/mmCIF/SDF parse path included)
+        run: wasm-pack build crates/molscene-wasm --target web --out-dir pkg
+
   viewer:
     name: Viewer (vitest)
     runs-on: ubuntu-latest
