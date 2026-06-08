@@ -116,9 +116,7 @@ def test_label_defaults_to_ligand():
 
 def test_label_color_and_size_apply():
     geom = (
-        ms.load(FIXTURE)
-        .label(ms.select.protein(), color="red", size=2.0)
-        .to_geometry()
+        ms.load(FIXTURE).label(ms.select.protein(), color="red", size=2.0).to_geometry()
     )
     labels = geom["labels"]
     assert len(labels) == 2

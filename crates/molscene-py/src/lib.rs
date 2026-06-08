@@ -73,6 +73,7 @@ impl Scene {
     }
 
     /// Add a representation over `selection` with optional typed style.
+    #[allow(clippy::too_many_arguments)] // one keyword per style field, by design
     #[pyo3(signature = (kind, selection, color=None, opacity=None, scale=None, radius=None, text=None))]
     fn representation(
         &mut self,

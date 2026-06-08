@@ -46,7 +46,10 @@ function labelSprite(label: Label): THREE.Sprite {
   const canvas = makeTextCanvas(label);
   const texture = new THREE.CanvasTexture(canvas);
   texture.minFilter = THREE.LinearFilter; // non-power-of-two canvas
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+  });
   const sprite = new THREE.Sprite(material);
   const [sx, sy] = labelSpriteScale(canvas.width, canvas.height, label.size);
   sprite.scale.set(sx, sy, 1);

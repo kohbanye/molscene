@@ -49,7 +49,7 @@ enum LabelText {
 
 impl LabelText {
     /// Parse a `text=` value; an unrecognized value falls back to `Residue`
-    /// (the default granularity) with a warning.
+    /// (the default granularity). Kept pure — no diagnostics in core.
     fn parse(value: Option<&str>) -> LabelText {
         match value {
             None => LabelText::Residue,
@@ -60,10 +60,7 @@ impl LabelText {
                 "chain" => LabelText::Chain,
                 "atom" | "name" => LabelText::Atom,
                 "element" => LabelText::Element,
-                other => {
-                    eprintln!("molscene: unknown label text {other:?}; using residue labels.");
-                    LabelText::Residue
-                }
+                _ => LabelText::Residue,
             },
         }
     }

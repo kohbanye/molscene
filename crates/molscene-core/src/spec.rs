@@ -13,7 +13,7 @@ use crate::selection::Expr;
 pub struct Style {
     pub color: Option<String>,
     pub opacity: Option<f32>,
-    /// Sphere radius scale (spheres); font scale (labels).
+    /// Radius scale (spheres/dots); font scale (labels).
     pub scale: Option<f32>,
     /// Cylinder radius (sticks).
     pub radius: Option<f32>,
