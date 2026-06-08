@@ -15,6 +15,11 @@ scene = (
 scene.show()   # interactive 3D in Jupyter / Colab
 ```
 
+Representations pick sensible defaults: `cartoon()`/`surface()` show the protein,
+`sticks()` the ligand, and `spheres()` everything *except* solvent — crystal waters
+and buffer ions aren't dumped into the view by accident. Pass an explicit selection
+(`ms.select.all()`, `ms.select.water()`, `ms.select.solvent()`) to show them.
+
 ## Architecture
 
 ```text
