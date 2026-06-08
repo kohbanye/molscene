@@ -75,6 +75,22 @@ def test_sticks_generate_cylinders():
     assert len(geom["cylinders"]["starts"]) % 2 == 0
 
 
+def test_lines_generate_cylinders_without_caps():
+    geom = ms.load(FIXTURE).lines(ms.select.protein()).to_geometry()
+    # Bonds within the dipeptide -> cylinders (two halves per bond)...
+    assert len(geom["cylinders"]["starts"]) > 0
+    assert len(geom["cylinders"]["starts"]) % 2 == 0
+    # ...but no ball-and-stick atom caps (unlike sticks).
+    assert len(geom["spheres"]["centers"]) == 0
+
+
+def test_dots_one_sphere_per_atom_no_cylinders():
+    geom = ms.load(FIXTURE).dots(ms.select.protein()).to_geometry()
+    # 9 protein atoms (ALA 5 + GLY 4); water excluded.
+    assert len(geom["spheres"]["centers"]) == 9
+    assert len(geom["cylinders"]["starts"]) == 0
+
+
 def test_cartoon_emits_meshes():
     geom = (
         ms.load(HELIX_FIXTURE)

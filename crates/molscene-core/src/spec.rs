@@ -46,6 +46,11 @@ pub enum RepresentationKind {
     Surface,
     Sticks,
     Spheres,
+    /// Thin bond lines: like sticks (bond-order aware) but without the
+    /// ball-and-stick atom caps — a cheap wireframe.
+    Lines,
+    /// Point cloud: a small sphere per atom (cheaper than full spheres).
+    Dots,
 }
 
 /// One representation: a selection of a structure drawn in a given style.

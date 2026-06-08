@@ -19,6 +19,8 @@ fn parse_kind(kind: &str) -> PyResult<RepresentationKind> {
         "surface" => RepresentationKind::Surface,
         "sticks" => RepresentationKind::Sticks,
         "spheres" => RepresentationKind::Spheres,
+        "lines" => RepresentationKind::Lines,
+        "dots" => RepresentationKind::Dots,
         other => {
             return Err(PyValueError::new_err(format!(
                 "unknown representation kind: {other:?}"
@@ -93,6 +95,8 @@ impl Scene {
             RepresentationKind::Surface => self.inner.surface(sel, style),
             RepresentationKind::Sticks => self.inner.sticks(sel, style),
             RepresentationKind::Spheres => self.inner.spheres(sel, style),
+            RepresentationKind::Lines => self.inner.lines(sel, style),
+            RepresentationKind::Dots => self.inner.dots(sel, style),
         };
         Ok(())
     }

@@ -20,6 +20,11 @@ use crate::structure::{vdw_radius, Atom, Element, Structure};
 
 const DEFAULT_STICK_RADIUS: f32 = 0.25;
 const DEFAULT_SPHERE_SCALE: f32 = 1.0;
+/// Default radius of the cylinders in the `lines` rep — much thinner than
+/// sticks, so bonds read as cheap wireframe lines.
+const DEFAULT_LINE_RADIUS: f32 = 0.05;
+/// Default vdW scale for the `dots` rep — small points, one per atom.
+const DEFAULT_DOT_SCALE: f32 = 0.2;
 
 /// Instanced spheres.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -590,6 +595,57 @@ impl Scene {
                     };
                     crate::surface::build_surface(structure, &indices, &params, &mut g.meshes);
                 }
+                RepresentationKind::Lines => {
+                    // Like sticks (bond-order aware, two-color split per bond),
+                    // but thinner and without the ball-and-stick atom caps.
+                    let radius = rep.style.radius.unwrap_or(DEFAULT_LINE_RADIUS);
+                    let selected: std::collections::HashSet<usize> =
+                        indices.iter().copied().collect();
+                    let perc: &crate::chem::Perception =
+                        perception.get_or_insert_with(|| crate::chem::perceive(structure));
+                    let bond_ctx = BondCtx::new(structure, perc);
+                    for bond in &perc.bonds {
+                        let (i, j) = (bond.a, bond.b);
+                        if !selected.contains(&i) || !selected.contains(&j) {
+                            continue;
+                        }
+                        let order = match bond.order {
+                            crate::structure::BondOrder::Aromatic => {
+                                if bond_ctx.aromatic_is_single(i, j) {
+                                    crate::structure::BondOrder::Single
+                                } else {
+                                    crate::structure::BondOrder::Double
+                                }
+                            }
+                            other => other,
+                        };
+                        let a = &structure.atoms[i];
+                        let b = &structure.atoms[j];
+                        let (pa, pb) = (pos(a), pos(b));
+                        let (ca, cb) = (color_at(i, a), color_at(j, b));
+                        emit_bond(
+                            &mut g.cylinders,
+                            order,
+                            pa,
+                            pb,
+                            radius,
+                            ca,
+                            cb,
+                            bond_ctx.reference(i, j),
+                        );
+                    }
+                    // No atom caps: that's what distinguishes lines from sticks.
+                }
+                RepresentationKind::Dots => {
+                    // A small sphere per atom — like spheres, just scaled down.
+                    let scale = rep.style.scale.unwrap_or(DEFAULT_DOT_SCALE);
+                    for &i in &indices {
+                        let a = &structure.atoms[i];
+                        g.spheres.centers.push(pos(a));
+                        g.spheres.radii.push(vdw_radius(&a.element) * scale);
+                        g.spheres.colors.push(color_at(i, a));
+                    }
+                }
             }
         }
 
@@ -690,6 +746,47 @@ mod tests {
                                                            // half cylinder meets at the midpoint (0.75, 0, 0)
         assert_eq!(g.cylinders.ends[0], [0.75, 0.0, 0.0]);
         assert_eq!(g.cylinders.starts[1], [0.75, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn lines_make_cylinders_per_bond_without_caps() {
+        let mut scene = two_carbons();
+        scene.lines(Expr::All, colored("element"));
+        let g = scene.to_geometry();
+        // one bond -> two half cylinders, thinner than sticks
+        assert_eq!(g.cylinders.starts.len(), 2);
+        assert_eq!(
+            g.cylinders.radii,
+            vec![DEFAULT_LINE_RADIUS, DEFAULT_LINE_RADIUS]
+        );
+        // unlike sticks, lines emit no ball-and-stick atom caps
+        assert!(g.spheres.centers.is_empty());
+    }
+
+    #[test]
+    fn lines_reflect_bond_order() {
+        use crate::structure::BondOrder::*;
+        let lines_cyl = |order| {
+            let mut scene = Scene::from_rcsb("test").with_structure(diatomic(order));
+            scene.lines(Expr::All, colored("element"));
+            scene.to_geometry().cylinders.starts.len()
+        };
+        // single → 1 line (2 half-cylinders), double → 2 lines (4), triple → 3 (6)
+        assert_eq!(lines_cyl(Single), 2);
+        assert_eq!(lines_cyl(Double), 4);
+        assert_eq!(lines_cyl(Triple), 6);
+    }
+
+    #[test]
+    fn dots_one_small_sphere_per_atom() {
+        let mut scene = two_carbons();
+        scene.dots(Expr::All, colored("element"));
+        let g = scene.to_geometry();
+        let r = vdw_radius(&Element::C) * DEFAULT_DOT_SCALE;
+        assert_eq!(g.spheres.centers.len(), 2);
+        assert_eq!(g.spheres.radii, vec![r, r]);
+        // dots are points only — no bond cylinders
+        assert!(g.cylinders.starts.is_empty());
     }
 
     fn cylinder_count_for(structure: Structure) -> usize {

@@ -309,11 +309,19 @@ half-widths — so the renderer fits tightly and aspect-aware.
 **Deliverable:** `ms.load("1ubq").cartoon().center(ms.select.resi(50))` frames
 that residue, and `.orient(ms.select.protein())` lays the long axis horizontal.
 
-## v0.7.3 — Cheap representations: lines & dots (~1 PR)
+## v0.7.3 — Cheap representations: lines & dots ✅ (shipped)
 
 - `lines` (thin bond lines) and `dots` (point clouds), reusing the existing
   sticks/spheres geometry path and `GeometrySpec`. Grouped together since they
   are the same kind of cheap rep and share the implementation.
+- **`lines`** reuses the sticks bond path (bond-order aware: double/triple draw
+  as parallel offset cylinders, aromatic Kekulé) but with thinner cylinders and
+  **without** the ball-and-stick atom caps. **`dots`** reuses the spheres path
+  with a small vdW scale — a sphere per atom. Both emit into the existing
+  `cylinders`/`spheres` channels, so the renderer is unchanged.
+
+**Deliverable:** `ms.load("1ubq").lines()` draws a cheap wireframe and
+`ms.load("1ubq").dots()` a point cloud. ✅
 
 ## v0.7.4 — Water/solvent defaults ✅ (shipped)
 

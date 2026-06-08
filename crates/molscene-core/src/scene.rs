@@ -112,6 +112,14 @@ impl Scene {
         self.push(RepresentationKind::Spheres, selection, style)
     }
 
+    pub fn lines(&mut self, selection: Expr, style: Style) -> &mut Self {
+        self.push(RepresentationKind::Lines, selection, style)
+    }
+
+    pub fn dots(&mut self, selection: Expr, style: Style) -> &mut Self {
+        self.push(RepresentationKind::Dots, selection, style)
+    }
+
     /// Center the camera on a selection (still auto-fits the zoom).
     pub fn center(&mut self, selection: Expr) -> &mut Self {
         self.camera.center = Some(selection);
