@@ -108,11 +108,17 @@ export function renderGeometry(
     scene.add(new THREE.Mesh(geometry, material));
   }
 
-  // Lighting.
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  // Lighting: a hemisphere light gives a soft sky/ground gradient so undersides
+  // aren't dead black (replacing flat ambient), plus a key + fill directional
+  // rig for shape-revealing shading. Lights live in world space, so the rig
+  // stays fixed relative to the molecule as the camera orbits.
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.6));
   const key = new THREE.DirectionalLight(0xffffff, 0.8);
   key.position.set(1, 1, 1);
   scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.3);
+  fill.position.set(-1, 0.5, -0.5);
+  scene.add(fill);
 
   // Camera fit to the bounding sphere.
   const { center, radius } = spec.camera;
@@ -129,7 +135,9 @@ export function renderGeometry(
   camera.lookAt(target);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(globalThis.devicePixelRatio || 1);
+  // Cap the device pixel ratio: MSAA already smooths edges, so rendering at
+  // 3x+ on hi-DPI displays just wastes fill rate.
+  renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2));
   renderer.setSize(width, height);
   element.appendChild(renderer.domElement);
 

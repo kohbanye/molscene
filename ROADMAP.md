@@ -72,7 +72,6 @@ These constrain every milestone below:
 
 - Transparency covers **mesh groups only** (surface / cartoon); instanced spheres
   and sticks are still opaque (per-instance alpha is a follow-up).
-- Lighting is flat; single colors read muddy.
 
 ---
 
@@ -271,11 +270,21 @@ below.
   `benches/geometry.rs`) over a deterministic 100 → 100k-atom lattice; run on
   demand (`cargo bench`), not in CI. These earn the "fast" claim for the README.
 
-## v0.7.1 — Lighting & materials (~1 PR)
+## v0.7.1 — Lighting & materials ✅ (shipped)
 
-- Hemisphere + fill lights, sensible defaults, truer CPK colors; configurable
-  background; antialiasing. Renderer-local (`viewer/`) plus a small optional
-  lighting/background channel on `GeometrySpec` — self-contained, one PR.
+- **Lighting** (renderer-local, `viewer/`): a `HemisphereLight` (soft sky/ground
+  gradient so undersides aren't dead black) plus a **key + fill** directional rig
+  replaces the old flat ambient + single key, giving shape-revealing shading under
+  the `MeshStandardMaterial` surfaces.
+- **Truer CPK colors**: `color::element_color` desaturated toward Jmol/PyMOL-family
+  values (carbon keeps its green, just softened) so single colors read cleaner under
+  the new lighting.
+- **Configurable background**: `scene.background("black")` (named color or
+  `#rrggbb`), threaded Python → PyO3 → `Scene` → `GeometrySpec.background` (the only
+  spec-side lighting/background channel; lighting itself stays renderer-local).
+  Defaults to white.
+- **Antialiasing**: MSAA stays on; the device-pixel-ratio is capped at 2 so hi-DPI
+  displays don't over-render.
 
 ## v0.7.2 — Camera framing (~1 PR)
 

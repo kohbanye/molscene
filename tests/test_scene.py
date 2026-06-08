@@ -29,6 +29,15 @@ def test_chaining_returns_same_object():
     assert scene.sticks(ms.select.all()) is scene
 
 
+def test_background_defaults_to_white_and_is_configurable():
+    scene = ms.load(FIXTURE).spheres(ms.select.all())
+    assert scene.to_geometry()["background"] == [1.0, 1.0, 1.0]
+    assert scene.background("black") is scene
+    assert scene.to_geometry()["background"] == [0.0, 0.0, 0.0]
+    scene.background("#ff0000")
+    assert scene.to_geometry()["background"] == [1.0, 0.0, 0.0]
+
+
 def test_spheres_geometry_one_per_selected_atom():
     geom = ms.load(FIXTURE).spheres(ms.select.protein(), color="element").to_geometry()
     # 9 protein atoms (ALA 5 + GLY 4); water excluded.

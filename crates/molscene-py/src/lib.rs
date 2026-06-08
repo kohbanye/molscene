@@ -108,6 +108,11 @@ impl Scene {
         self.inner.set_color(selection.expr.clone(), color);
     }
 
+    /// Set the scene background color (a named color or `#rrggbb`).
+    fn set_background(&mut self, color: &str) {
+        self.inner.background(color);
+    }
+
     /// Compile to the JSON geometry spec (instanced draw list for the renderer).
     fn to_geometry_json(&self) -> String {
         self.inner.to_geometry_json()

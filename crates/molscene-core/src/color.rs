@@ -103,17 +103,19 @@ impl ColorScheme {
     }
 }
 
-/// CPK color for an element (PyMOL values); unknown → light grey.
+/// CPK color for an element (Jmol CPK / PyMOL-derived, desaturated slightly so
+/// single colors read truer under the viewer's hemisphere+fill lighting);
+/// carbon keeps the PyMOL-family green. Unknown → light grey.
 pub fn element_color(element: &Element) -> Rgb {
     match element {
-        Element::C => [0.2, 1.0, 0.2],
-        Element::N => [0.2, 0.2, 1.0],
-        Element::O => [1.0, 0.3, 0.3],
-        Element::H => [0.9, 0.9, 0.9],
-        Element::S => [0.9, 0.775, 0.25],
+        Element::C => [0.30, 0.85, 0.30],
+        Element::N => [0.20, 0.30, 0.85],
+        Element::O => [0.90, 0.20, 0.20],
+        Element::H => [0.92, 0.92, 0.92],
+        Element::S => [1.0, 0.78, 0.20],
         Element::P => [1.0, 0.5, 0.0],
         Element::Fe => [0.88, 0.40, 0.20],
-        Element::Cl => [0.1, 0.9, 0.1],
+        Element::Cl => [0.12, 0.94, 0.12],
         Element::Na => [0.67, 0.36, 0.95],
         Element::Mg => [0.54, 1.0, 0.0],
         Element::Zn => [0.49, 0.50, 0.69],
@@ -303,8 +305,11 @@ mod tests {
 
     #[test]
     fn cpk_element_colors() {
-        assert_eq!(element_color(&Element::C), [0.2, 1.0, 0.2]);
-        assert_eq!(element_color(&Element::from_symbol("o")), [1.0, 0.3, 0.3]);
+        assert_eq!(element_color(&Element::C), [0.30, 0.85, 0.30]);
+        assert_eq!(
+            element_color(&Element::from_symbol("o")),
+            [0.90, 0.20, 0.20]
+        );
         assert_eq!(element_color(&Element::from_symbol("Xx")), [0.8, 0.8, 0.8]);
         // fallback
     }
