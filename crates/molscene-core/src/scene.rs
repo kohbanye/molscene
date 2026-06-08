@@ -120,6 +120,10 @@ impl Scene {
         self.push(RepresentationKind::Dots, selection, style)
     }
 
+    pub fn labels(&mut self, selection: Expr, style: Style) -> &mut Self {
+        self.push(RepresentationKind::Labels, selection, style)
+    }
+
     /// Center the camera on a selection (still auto-fits the zoom).
     pub fn center(&mut self, selection: Expr) -> &mut Self {
         self.camera.center = Some(selection);

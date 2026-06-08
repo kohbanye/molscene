@@ -13,10 +13,13 @@ use crate::selection::Expr;
 pub struct Style {
     pub color: Option<String>,
     pub opacity: Option<f32>,
-    /// Sphere radius scale (spheres).
+    /// Sphere radius scale (spheres); font scale (labels).
     pub scale: Option<f32>,
     /// Cylinder radius (sticks).
     pub radius: Option<f32>,
+    /// Label content mode (labels): `residue` (default) / `resn` / `resi` /
+    /// `chain` / `atom` / `element`. Ignored by other representations.
+    pub text: Option<String>,
 }
 
 /// Where a structure's coordinates come from (provenance only).
@@ -51,6 +54,9 @@ pub enum RepresentationKind {
     Lines,
     /// Point cloud: a small sphere per atom (cheaper than full spheres).
     Dots,
+    /// Text annotations: per-residue or per-atom labels drawn as camera-facing
+    /// billboards.
+    Labels,
 }
 
 /// One representation: a selection of a structure drawn in a given style.
