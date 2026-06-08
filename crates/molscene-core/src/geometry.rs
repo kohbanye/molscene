@@ -461,6 +461,9 @@ impl Scene {
     /// Compile the scene into a renderer-neutral draw list.
     pub fn to_geometry(&self) -> GeometrySpec {
         let mut g = GeometrySpec::default();
+        if let Some(bg) = self.background_color() {
+            g.background = bg;
+        }
         let Some(structure) = self.structure() else {
             eprintln!("molscene: scene has no loaded coordinates; nothing to render.");
             return g;
@@ -670,7 +673,7 @@ mod tests {
         let g = scene.to_geometry();
         assert_eq!(g.spheres.centers.len(), 2);
         assert_eq!(g.spheres.radii, vec![1.70, 1.70]);
-        assert_eq!(g.spheres.colors[0], [0.2, 1.0, 0.2]); // carbon CPK
+        assert_eq!(g.spheres.colors[0], [0.30, 0.85, 0.30]); // carbon CPK
     }
 
     #[test]
@@ -874,7 +877,7 @@ mod tests {
         scene.spheres(Expr::All, colored("element:cyan"));
         let g = scene.to_geometry();
         assert_eq!(g.spheres.colors[0], [0.0, 1.0, 1.0]); // carbon → cyan
-        assert_eq!(g.spheres.colors[1], [1.0, 0.3, 0.3]); // oxygen → CPK
+        assert_eq!(g.spheres.colors[1], [0.90, 0.20, 0.20]); // oxygen → CPK
     }
 
     #[test]

@@ -127,6 +127,16 @@ class Scene:
         self._core.set_color(_coerce(selection), color)
         return self
 
+    def background(self, color: str) -> Scene:
+        """Set the scene background color (a named color or ``#rrggbb``).
+
+        Defaults to white when never called::
+
+            ms.load("1ubq").cartoon().background("black")
+        """
+        self._core.set_background(color)
+        return self
+
     # -- serialization ------------------------------------------------------
     def to_geometry(self) -> dict:
         """The compiled geometry spec (instanced draw list) the renderer draws.
