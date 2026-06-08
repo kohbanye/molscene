@@ -53,9 +53,9 @@
     </div>
     <div id="viewport"></div>
 
-    <!-- The Three.js viewer IIFE (built by `cd viewer && npm run build`).
+    <!-- The Three.js viewer IIFE (copied next to this page by web/build.sh).
          Exposes window.molscene.renderGeometry(element, spec). -->
-    <script src="../python/molscene/_static/viewer.js"></script>
+    <script src="./viewer.js"></script>
     <!-- The demo driver: imports the wasm-pack ES module from ./pkg. -->
     <script type="module" src="./main.js"></script>
   </body>

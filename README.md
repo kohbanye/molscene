@@ -56,9 +56,11 @@ Three.js viewer. PDB / mmCIF / SDF all parse in the browser. See
 [`web/README.md`](web/README.md):
 
 ```sh
-./web/build.sh                 # builds the viewer bundle + the WASM core
-python3 -m http.server 8000    # then open http://localhost:8000/web/index.html
+./web/build.sh                              # viewer bundle + WASM core → web/
+python3 -m http.server 8000 --directory web # then open http://localhost:8000/
 ```
+
+A hosted build is published to GitHub Pages (`https://kohbanye.github.io/molscene/`).
 
 ## Development
 

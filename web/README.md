@@ -7,9 +7,17 @@ facade uses, compiles to a `GeometrySpec` in the browser, and hands that spec �
 the one and only serialized contract — to the existing Three.js viewer.
 
 ```
-web/index.html ──> ../python/molscene/_static/viewer.js  (renderGeometry)
+web/index.html ──> ./viewer.js               (renderGeometry; copied by build.sh)
               └──> ./main.js ──> ./pkg/molscene_wasm.js   (the WASM core)
 ```
+
+## Hosted demo
+
+Pushed to `main`, the demo is published to **GitHub Pages** by
+[`.github/workflows/pages.yml`](../.github/workflows/pages.yml) at
+`https://kohbanye.github.io/molscene/`. (One-time: enable Pages in the repo
+settings with **Source: GitHub Actions**. To preview from a branch before
+merging, run the *Deploy web demo* workflow manually from the Actions tab.)
 
 ## Build
 
@@ -27,20 +35,22 @@ Then:
 ./web/build.sh
 ```
 
-This builds two artifacts:
+This builds the demo's artifacts (all **generated, gitignored**):
 
-- `python/molscene/_static/viewer.js` — the Three.js viewer IIFE
-  (`window.molscene.renderGeometry`), reused unchanged from the notebook path.
+- `web/viewer.js` — the Three.js viewer IIFE (`window.molscene.renderGeometry`),
+  built by esbuild and copied next to the page (reused unchanged from the
+  notebook path).
 - `web/pkg/` — the wasm-pack output (`molscene_wasm.js` + `molscene_wasm_bg.wasm`),
-  an ES module the page imports. **Generated, gitignored.**
+  an ES module the page imports.
 
 ## Serve
 
-ES modules and `.wasm` can't be loaded over `file://`, so serve over HTTP:
+ES modules and `.wasm` can't be loaded over `file://`, so serve the `web/`
+directory over HTTP:
 
 ```sh
-python3 -m http.server 8000
-# open http://localhost:8000/web/index.html
+python3 -m http.server 8000 --directory web
+# open http://localhost:8000/
 ```
 
 The demo fetches `1UBQ` from RCSB (CORS-enabled) and draws a **cartoon** in the
