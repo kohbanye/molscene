@@ -223,6 +223,65 @@ def test_orient_rotates_the_screen_basis():
         assert math.isclose(math.hypot(*axis), 1.0, abs_tol=1e-4)
 
 
+def test_representations_expose_editable_handles():
+    scene = ms.load(FIXTURE).cartoon(ms.select.protein()).surface(ms.select.protein())
+    reps = scene.representations
+    assert len(reps) == 2
+    assert [r.kind for r in reps] == ["cartoon", "surface"]
+    assert isinstance(reps[0], ms.Representation)
+
+
+def test_representation_opacity_edited_in_place_affects_geometry():
+    scene = (
+        ms.load(HELIX_FIXTURE).cartoon(ms.select.protein()).surface(ms.select.protein())
+    )
+    # The surface starts opaque...
+    assert scene.to_geometry()["meshes"][-1]["opacity"] == 1.0
+    # ...edit it in place and the next compile picks it up.
+    scene.representations[1].opacity = 0.3
+    assert scene.representations[1].opacity == pytest.approx(0.3)
+    assert scene.to_geometry()["meshes"][-1]["opacity"] == pytest.approx(0.3)
+
+
+def test_representation_color_edit_preserves_other_fields():
+    scene = ms.load(FIXTURE).spheres(ms.select.protein(), scale=1.5)
+    rep = scene.representations[0]
+    rep.color = "red"
+    # Editing one field leaves the others untouched (read-modify-write).
+    assert rep.color == "red"
+    assert rep.scale == pytest.approx(1.5)
+
+
+def test_representation_selection_retarget_changes_geometry():
+    scene = ms.load(FIXTURE).spheres(ms.select.protein())
+    assert len(scene.to_geometry()["spheres"]["centers"]) == 9
+    # Re-target the existing representation at everything (incl. the water).
+    scene.representations[0].selection = ms.select.all()
+    assert len(scene.to_geometry()["spheres"]["centers"]) == 10
+
+
+def test_representation_clear_field_with_none():
+    scene = ms.load(FIXTURE).surface(ms.select.protein(), opacity=0.3)
+    rep = scene.representations[0]
+    assert rep.opacity == pytest.approx(0.3)
+    rep.opacity = None
+    assert rep.opacity is None
+    # Cleared back to the opaque default.
+    assert scene.to_geometry()["meshes"][-1]["opacity"] == 1.0
+
+
+def test_representation_index_out_of_range_raises():
+    scene = ms.load(FIXTURE).spheres(ms.select.protein())
+    with pytest.raises(IndexError):
+        scene._core.rep_kind(5)
+
+
+def test_representation_string_selection_rejected():
+    scene = ms.load(FIXTURE).spheres(ms.select.protein())
+    with pytest.raises(TypeError):
+        scene.representations[0].selection = "protein"
+
+
 def test_unknown_representation_kind_rejected():
     scene = ms.load(FIXTURE)
     with pytest.raises(ValueError):

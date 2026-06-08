@@ -18,10 +18,18 @@ from __future__ import annotations
 import os
 
 from . import colors
-from .scene import Scene
+from .scene import Representation, Scene
 from .selection import Selection, select
 
-__all__ = ["load", "Scene", "Selection", "select", "colors", "__version__"]
+__all__ = [
+    "load",
+    "Scene",
+    "Representation",
+    "Selection",
+    "select",
+    "colors",
+    "__version__",
+]
 __version__ = "0.1.0"
 
 
