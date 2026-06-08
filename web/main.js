@@ -45,9 +45,21 @@ aromatic ring demo
 M  END
 `;
 
+// The current Three.js renderer, kept so a re-render (e.g. an upload) can tear
+// down the previous one — renderGeometry only appends a canvas and starts its
+// own animation loop, so without this the old scene stays on screen.
+let currentRenderer = null;
+
 function render(scene) {
   const spec = JSON.parse(scene.toGeometryJson()); // the only wire format
-  window.molscene.renderGeometry(viewport, spec);
+  if (currentRenderer) {
+    currentRenderer.setAnimationLoop(null);
+    currentRenderer.dispose();
+    currentRenderer.domElement.remove();
+    currentRenderer = null;
+  }
+  viewport.replaceChildren();
+  currentRenderer = window.molscene.renderGeometry(viewport, spec);
 }
 
 // Cartoon for the protein chains, sticks for everything else that isn't water.
