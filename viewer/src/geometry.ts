@@ -75,13 +75,45 @@ export function cross(a: Vec3, b: Vec3): Vec3 {
   ];
 }
 
+/**
+ * A text annotation drawn as a camera-facing billboard (a Three.js sprite) at
+ * `position`. molscene picks the position, text, and color in Rust; the renderer
+ * only rasterizes the glyphs. `size` is a font scale.
+ */
+export interface Label {
+  position: Vec3;
+  text: string;
+  color: Vec3;
+  size: number;
+}
+
 export interface GeometrySpec {
   spheres: Spheres;
   cylinders: Cylinders;
   meshes: Mesh[];
+  labels?: Label[];
   camera: GeomCamera;
   background: Vec3;
 }
+
+/**
+ * World-space `[width, height]` for a label sprite, given the rasterized text
+ * canvas size (px) and the spec's font `size`. The height is anchored to a base
+ * world height (so labels are legible at molecular scale) scaled by `size`; the
+ * width preserves the canvas aspect ratio so glyphs aren't stretched.
+ */
+export function labelSpriteScale(
+  canvasWidth: number,
+  canvasHeight: number,
+  size: number,
+): [number, number] {
+  const baseHeight = LABEL_BASE_HEIGHT * size;
+  const aspect = canvasHeight > 0 ? canvasWidth / canvasHeight : 1;
+  return [baseHeight * aspect, baseHeight];
+}
+
+/** Base world-space height (Å) of a label at `size = 1`. */
+const LABEL_BASE_HEIGHT = 2.0;
 
 /** Whether a mesh group needs the transparent (depth-sorted blend) path. */
 export function isTransparent(opacity: number): boolean {

@@ -13,7 +13,46 @@ import {
   type GeometrySpec,
   type Instance,
   isTransparent,
+  type Label,
+  labelSpriteScale,
 } from "./geometry";
+
+/** Font size (px) the label text is rasterized at; world scaling is separate. */
+const LABEL_FONT_PX = 64;
+
+/** Rasterize `text` onto a tightly-sized canvas in the label's color. */
+function makeTextCanvas(label: Label): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d")!;
+  const font = `bold ${LABEL_FONT_PX}px sans-serif`;
+  // Measure with the target font, then size the canvas to fit (with padding).
+  ctx.font = font;
+  const pad = LABEL_FONT_PX * 0.25;
+  const textWidth = ctx.measureText(label.text).width;
+  canvas.width = Math.ceil(textWidth + pad * 2);
+  canvas.height = Math.ceil(LABEL_FONT_PX + pad * 2);
+  // measureText/canvas size reset the context, so re-apply the font.
+  ctx.font = font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const [r, g, b] = label.color;
+  ctx.fillStyle = `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
+  ctx.fillText(label.text, canvas.width / 2, canvas.height / 2);
+  return canvas;
+}
+
+/** A camera-facing text sprite for one label. */
+function labelSprite(label: Label): THREE.Sprite {
+  const canvas = makeTextCanvas(label);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter; // non-power-of-two canvas
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+  const sprite = new THREE.Sprite(material);
+  const [sx, sy] = labelSpriteScale(canvas.width, canvas.height, label.size);
+  sprite.scale.set(sx, sy, 1);
+  sprite.position.set(label.position[0], label.position[1], label.position[2]);
+  return sprite;
+}
 
 function instancedMesh(
   base: THREE.BufferGeometry,
@@ -108,6 +147,13 @@ export function renderGeometry(
       depthWrite: !transparent,
     });
     scene.add(new THREE.Mesh(geometry, material));
+  }
+
+  // Text labels: camera-facing sprites with the glyphs rasterized to a canvas
+  // texture. Three.js sprites billboard automatically, so they stay readable as
+  // the camera orbits.
+  for (const label of spec.labels ?? []) {
+    scene.add(labelSprite(label));
   }
 
   // Lighting: a hemisphere light gives a soft sky/ground gradient so undersides
