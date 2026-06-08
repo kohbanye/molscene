@@ -91,6 +91,46 @@ def test_dots_one_sphere_per_atom_no_cylinders():
     assert len(geom["cylinders"]["starts"]) == 0
 
 
+def test_label_one_per_residue_by_default():
+    geom = ms.load(FIXTURE).label(ms.select.protein()).to_geometry()
+    # 2 protein residues (ALA + GLY) -> one residue label each, black by default.
+    labels = geom["labels"]
+    assert len(labels) == 2
+    assert all(label["color"] == [0.0, 0.0, 0.0] for label in labels)
+    texts = {label["text"] for label in labels}
+    assert any(t.startswith("ALA") for t in texts)
+    assert any(t.startswith("GLY") for t in texts)
+
+
+def test_label_atom_mode_is_one_per_atom():
+    geom = ms.load(FIXTURE).label(ms.select.protein(), text="atom").to_geometry()
+    # 9 protein atoms (ALA 5 + GLY 4) -> one label each.
+    assert len(geom["labels"]) == 9
+
+
+def test_label_defaults_to_ligand():
+    # solvated.pdb has an NA ion (hetero, non-water) = the only ligand residue.
+    geom = ms.load(SOLVATED_FIXTURE).label().to_geometry()
+    assert len(geom["labels"]) == 1
+
+
+def test_label_color_and_size_apply():
+    geom = (
+        ms.load(FIXTURE)
+        .label(ms.select.protein(), color="red", size=2.0)
+        .to_geometry()
+    )
+    labels = geom["labels"]
+    assert len(labels) == 2
+    assert all(label["color"] == [1.0, 0.0, 0.0] for label in labels)
+    assert all(label["size"] == pytest.approx(2.0) for label in labels)
+
+
+def test_label_returns_same_object():
+    scene = ms.load(FIXTURE)
+    assert scene.label(ms.select.protein()) is scene
+
+
 def test_cartoon_emits_meshes():
     geom = (
         ms.load(HELIX_FIXTURE)

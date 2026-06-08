@@ -52,6 +52,7 @@ class Scene:
         opacity=None,
         scale=None,
         radius=None,
+        text=None,
     ) -> Scene:
         self._core.representation(
             kind,
@@ -60,6 +61,7 @@ class Scene:
             opacity=opacity,
             scale=scale,
             radius=radius,
+            text=text,
         )
         self._n_reps += 1
         return self
@@ -138,6 +140,29 @@ class Scene:
         """
         sel = selection if selection is not None else select.all()
         return self._add("dots", sel, color=color, opacity=opacity, scale=scale)
+
+    def label(
+        self,
+        selection: Selection | None = None,
+        *,
+        text=None,
+        color=None,
+        size=None,
+    ) -> Scene:
+        """Text annotations drawn as camera-facing billboards. Defaults to
+        ``ms.select.ligand()`` and one label per residue (``"ALA42"``)::
+
+            ms.load("1ubq").cartoon().label(ms.select.resi(50))
+
+        ``text`` picks the content: ``"residue"`` (default), ``"resn"``,
+        ``"resi"``, ``"chain"`` (one per residue) or ``"atom"`` / ``"element"``
+        (one per atom). Labels default to black; pass ``color`` to recolor and
+        ``size`` to scale the font::
+
+            ms.load("lig.sdf").sticks().label(text="atom", size=1.5)
+        """
+        sel = selection if selection is not None else select.ligand()
+        return self._add("labels", sel, text=text, color=color, scale=size)
 
     def center(self, selection: Selection | None = None) -> Scene:
         """Frame the view on a selection (still auto-fits the zoom)::
