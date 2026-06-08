@@ -67,12 +67,16 @@ class Scene:
     def cartoon(
         self, selection: Selection | None = None, *, color=None, opacity=None
     ) -> Scene:
+        """Protein/nucleic ribbons. Defaults to ``ms.select.protein()`` — crystal
+        waters and solvent ions are never drawn as cartoon."""
         sel = selection if selection is not None else select.protein()
         return self._add("cartoon", sel, color=color, opacity=opacity)
 
     def surface(
         self, selection: Selection | None = None, *, color=None, opacity=None
     ) -> Scene:
+        """Molecular surface. Defaults to ``ms.select.protein()`` — water/solvent
+        is excluded."""
         sel = selection if selection is not None else select.protein()
         return self._add("surface", sel, color=color, opacity=opacity)
 
@@ -84,6 +88,8 @@ class Scene:
         opacity=None,
         radius=None,
     ) -> Scene:
+        """Bond sticks. Defaults to ``ms.select.ligand()`` (hetero atoms minus
+        water), so crystal waters aren't drawn by accident."""
         sel = selection if selection is not None else select.ligand()
         return self._add("sticks", sel, color=color, opacity=opacity, radius=radius)
 
@@ -95,7 +101,15 @@ class Scene:
         opacity=None,
         scale=None,
     ) -> Scene:
-        sel = selection if selection is not None else select.all()
+        """Atom spheres. Defaults to everything *except* solvent
+        (``ms.select.all() & ~ms.select.solvent()``) so crystal waters and buffer
+        ions aren't dumped into the view. Pass ``ms.select.all()`` (or
+        ``ms.select.water()`` / ``ms.select.solvent()``) explicitly to show them."""
+        sel = (
+            selection
+            if selection is not None
+            else select.all() & ~select.solvent()
+        )
         return self._add("spheres", sel, color=color, opacity=opacity, scale=scale)
 
     def center(self, selection: Selection | None = None) -> Scene:

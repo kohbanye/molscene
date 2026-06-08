@@ -11,6 +11,8 @@ import molscene as ms
 import pytest
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "dipeptide.pdb")
+SOLVATED_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "solvated.pdb")
+# solvated.pdb: 9 protein atoms + 1 HOH water + 1 NA ion (11 total).
 
 
 def n_spheres(scene: ms.Scene) -> int:
@@ -24,6 +26,7 @@ def n_spheres(scene: ms.Scene) -> int:
 def test_basic_macros():
     assert str(ms.select.protein()) == "protein"
     assert str(ms.select.water()) == "water"
+    assert str(ms.select.solvent()) == "solvent"
     assert str(ms.select.sidechain()) == "sidechain"
 
 
@@ -90,6 +93,16 @@ def test_composed_selection_is_evaluated():
     # protein & ~water -> all 9 non-hetero atoms.
     sel = ms.select.protein() & ~ms.select.water()
     assert n_spheres(ms.load(FIXTURE).spheres(sel)) == 9
+
+
+def test_solvent_includes_water_and_ions():
+    # solvent = water | common ions: the HOH oxygen and the NA ion.
+    assert n_spheres(ms.load(SOLVATED_FIXTURE).spheres(ms.select.solvent())) == 2
+    # water alone stays water-only (the ion is not water).
+    assert n_spheres(ms.load(SOLVATED_FIXTURE).spheres(ms.select.water())) == 1
+    # ~solvent drops both -> the 9 protein atoms.
+    sel = ms.select.all() & ~ms.select.solvent()
+    assert n_spheres(ms.load(SOLVATED_FIXTURE).spheres(sel)) == 9
 
 
 def test_aggregation_evaluates():
