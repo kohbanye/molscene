@@ -102,5 +102,14 @@ jobs:
           uv venv --python 3.12
           uv pip install maturin pytest
           uv run maturin develop
+      - name: Verify type stubs are current (pyo3-stub-gen)
+        # Regenerate python/molscene/_core/__init__.pyi from the live PyO3
+        # signatures and fail if the committed stub has drifted. PYO3_PYTHON
+        # points the (non-extension-module) stub_gen binary at the venv
+        # interpreter so it links the same libpython as the wheel build.
+        run: |
+          PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')" \
+            cargo run -p molscene-py --features stub-gen --bin stub_gen
+          git diff --exit-code python/molscene/_core
       - name: Run tests
         run: uv run pytest -m "not network"

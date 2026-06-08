@@ -12,6 +12,19 @@ use molscene_core::spec::{RepresentationKind, Source, Style};
 use molscene_core::{CmpOp, Expr, NumField};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
+
+fn kind_name(kind: RepresentationKind) -> &'static str {
+    match kind {
+        RepresentationKind::Cartoon => "cartoon",
+        RepresentationKind::Surface => "surface",
+        RepresentationKind::Sticks => "sticks",
+        RepresentationKind::Spheres => "spheres",
+        RepresentationKind::Lines => "lines",
+        RepresentationKind::Dots => "dots",
+        RepresentationKind::Labels => "labels",
+    }
+}
 
 fn parse_kind(kind: &str) -> PyResult<RepresentationKind> {
     Ok(match kind {
@@ -31,11 +44,13 @@ fn parse_kind(kind: &str) -> PyResult<RepresentationKind> {
 }
 
 /// A molecular scene. Wraps `molscene_core::Scene`.
+#[gen_stub_pyclass]
 #[pyclass(module = "molscene._core")]
 pub struct Scene {
     inner: CoreScene,
 }
 
+#[gen_stub_pymethods]
 #[pymethods]
 impl Scene {
     /// Build a scene from PDB text fetched for an RCSB `id`.
@@ -127,15 +142,111 @@ impl Scene {
         self.inner.background(color);
     }
 
+    // -- in-place representation editing ------------------------------------
+    // The facade exposes these as a `scene.representations` sequence of editable
+    // proxies; here they are flat index-keyed accessors over the core's
+    // representation list (state stays in Rust).
+
+    /// Number of representations added so far.
+    fn num_representations(&self) -> usize {
+        self.inner.representations().len()
+    }
+
+    /// The kind of representation `index` (e.g. `"cartoon"`).
+    fn rep_kind(&self, index: usize) -> PyResult<&'static str> {
+        Ok(kind_name(self.rep(index)?.kind))
+    }
+
+    /// The style of representation `index` as
+    /// `(color, opacity, scale, radius, text)`.
+    #[allow(clippy::type_complexity)]
+    fn rep_style(
+        &self,
+        index: usize,
+    ) -> PyResult<(
+        Option<String>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<String>,
+    )> {
+        let s = &self.rep(index)?.style;
+        Ok((
+            s.color.clone(),
+            s.opacity.map(|v| v as f64),
+            s.scale.map(|v| v as f64),
+            s.radius.map(|v| v as f64),
+            s.text.clone(),
+        ))
+    }
+
+    /// Replace the whole style of representation `index`. A `None` field clears
+    /// that field (back to the representation's default).
+    #[pyo3(signature = (index, color=None, opacity=None, scale=None, radius=None, text=None))]
+    fn set_rep_style(
+        &mut self,
+        index: usize,
+        color: Option<String>,
+        opacity: Option<f64>,
+        scale: Option<f64>,
+        radius: Option<f64>,
+        text: Option<String>,
+    ) -> PyResult<()> {
+        self.rep_mut(index)?.style = Style {
+            color,
+            opacity: opacity.map(|v| v as f32),
+            scale: scale.map(|v| v as f32),
+            radius: radius.map(|v| v as f32),
+            text,
+        };
+        Ok(())
+    }
+
+    /// The selection of representation `index`.
+    fn rep_selection(&self, index: usize) -> PyResult<Selection> {
+        Ok(Selection::of(self.rep(index)?.selection.clone()))
+    }
+
+    /// Re-target representation `index` at a new selection.
+    fn set_rep_selection(&mut self, index: usize, selection: &Selection) -> PyResult<()> {
+        self.rep_mut(index)?.selection = selection.expr.clone();
+        Ok(())
+    }
+
     /// Compile to the JSON geometry spec (instanced draw list for the renderer).
     fn to_geometry_json(&self) -> String {
         self.inner.to_geometry_json()
     }
 }
 
+impl Scene {
+    /// Borrow representation `index`, raising `IndexError` if out of range.
+    fn rep(&self, index: usize) -> PyResult<&molscene_core::spec::Representation> {
+        self.inner
+            .representations()
+            .get(index)
+            .ok_or_else(|| index_error(index, self.inner.representations().len()))
+    }
+
+    fn rep_mut(&mut self, index: usize) -> PyResult<&mut molscene_core::spec::Representation> {
+        let len = self.inner.representations().len();
+        self.inner
+            .representations_mut()
+            .get_mut(index)
+            .ok_or_else(|| index_error(index, len))
+    }
+}
+
+fn index_error(index: usize, len: usize) -> PyErr {
+    pyo3::exceptions::PyIndexError::new_err(format!(
+        "representation index {index} out of range (have {len})"
+    ))
+}
+
 /// A selection — a wrapper over a core [`Expr`]. Built through the constructor
 /// staticmethods (the `ms.select` DSL) and composed with the boolean operators
 /// (`& | ~`). Valid by construction; there is no selection string.
+#[gen_stub_pyclass]
 #[pyclass(module = "molscene._core", skip_from_py_object)]
 #[derive(Clone)]
 pub struct Selection {
@@ -148,6 +259,7 @@ impl Selection {
     }
 }
 
+#[gen_stub_pymethods]
 #[pymethods]
 impl Selection {
     // -- classification macros ----------------------------------------------
@@ -304,4 +416,14 @@ fn _core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Scene>()?;
     m.add_class::<Selection>()?;
     Ok(())
+}
+
+/// Gathers the `#[gen_stub_*]`-registered signatures into a [`StubInfo`], using
+/// the workspace-root `pyproject.toml` (two levels up from this crate) for the
+/// maturin layout — `module-name = "molscene._core"` and `python-source =
+/// "python"` — so the `.pyi` lands at `python/molscene/_core.pyi`. The
+/// `stub_gen` binary calls this and writes the stubs.
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::generate::StubInfo> {
+    let pyproject = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../pyproject.toml");
+    pyo3_stub_gen::generate::StubInfo::from_pyproject_toml(pyproject)
 }

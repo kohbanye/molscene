@@ -172,6 +172,14 @@ impl Scene {
         &self.representations
     }
 
+    /// Mutable access to the representations, for in-place editing after they
+    /// have been added (e.g. tweaking a style field or re-targeting a selection
+    /// without rebuilding the scene). Geometry is still computed lazily, so
+    /// edits here are picked up by the next `to_geometry`.
+    pub fn representations_mut(&mut self) -> &mut [Representation] {
+        &mut self.representations
+    }
+
     /// Explicit color overrides added so far (in application order).
     pub fn color_assignments(&self) -> &[ColorAssignment] {
         &self.colors
@@ -254,6 +262,26 @@ mod tests {
         // An unrecognized color leaves the previous value untouched.
         scene.background("definitely-not-a-color");
         assert_eq!(scene.background_color(), Some([1.0, 0.0, 0.0]));
+    }
+
+    #[test]
+    fn representations_can_be_edited_in_place() {
+        let mut scene = Scene::from_rcsb("1ubq");
+        scene
+            .cartoon(Expr::Protein, Style::default())
+            .surface(Expr::Protein, Style::default());
+
+        // Editing a style field in place is reflected back through the
+        // read-only accessor (and so would be picked up at geometry time).
+        scene.representations_mut()[0].style.opacity = Some(0.5);
+        scene.representations_mut()[1].style.color = Some("red".into());
+        // The selection can be re-targeted too.
+        scene.representations_mut()[1].selection = Expr::Ligand;
+
+        let reps = scene.representations();
+        assert_eq!(reps[0].style.opacity, Some(0.5));
+        assert_eq!(reps[1].style.color.as_deref(), Some("red"));
+        assert_eq!(reps[1].selection, Expr::Ligand);
     }
 
     #[test]

@@ -24,6 +24,102 @@ def _coerce(selection: Selection) -> Selection:
     return selection
 
 
+# Order of the style tuple exchanged with `_core` (rep_style / set_rep_style).
+_STYLE_FIELDS = ("color", "opacity", "scale", "radius", "text")
+
+
+class Representation:
+    """An editable handle on one representation already added to a scene.
+
+    Style fields can be read and reassigned in place after the fact, without
+    rebuilding the scene — geometry is recomputed lazily at display time, so
+    edits here are reflected by the next ``show`` / ``to_geometry``::
+
+        scene = ms.load("1ubq").cartoon().surface()
+        scene.representations[1].opacity = 0.3
+        scene.representations[0].color = "spectrum"
+        scene.representations[0].selection = ms.select.chain("A")
+
+    ``kind`` is read-only (it picks the geometry path); ``selection`` and the
+    style fields ``color`` / ``opacity`` / ``scale`` / ``radius`` / ``text`` are
+    read/write. Setting a field to ``None`` clears it back to the default.
+    """
+
+    __slots__ = ("_core", "_index")
+
+    def __init__(self, core: _core.Scene, index: int) -> None:
+        self._core = core
+        self._index = index
+
+    @property
+    def kind(self) -> str:
+        return self._core.rep_kind(self._index)
+
+    @property
+    def selection(self) -> Selection:
+        return self._core.rep_selection(self._index)
+
+    @selection.setter
+    def selection(self, value: Selection) -> None:
+        self._core.set_rep_selection(self._index, _coerce(value))
+
+    def _get(self, field: str):
+        style = self._core.rep_style(self._index)
+        return style[_STYLE_FIELDS.index(field)]
+
+    def _set(self, field: str, value) -> None:
+        style = list(self._core.rep_style(self._index))
+        style[_STYLE_FIELDS.index(field)] = value
+        self._core.set_rep_style(self._index, *style)
+
+    @property
+    def color(self) -> str | None:
+        return self._get("color")
+
+    @color.setter
+    def color(self, value: str | None) -> None:
+        self._set("color", value)
+
+    @property
+    def opacity(self) -> float | None:
+        return self._get("opacity")
+
+    @opacity.setter
+    def opacity(self, value: float | None) -> None:
+        self._set("opacity", value)
+
+    @property
+    def scale(self) -> float | None:
+        return self._get("scale")
+
+    @scale.setter
+    def scale(self, value: float | None) -> None:
+        self._set("scale", value)
+
+    @property
+    def radius(self) -> float | None:
+        return self._get("radius")
+
+    @radius.setter
+    def radius(self, value: float | None) -> None:
+        self._set("radius", value)
+
+    @property
+    def text(self) -> str | None:
+        return self._get("text")
+
+    @text.setter
+    def text(self, value: str | None) -> None:
+        self._set("text", value)
+
+    def __repr__(self) -> str:
+        return (
+            f"<molscene.Representation {self.kind} "
+            f"selection={self.selection!s} color={self.color!r} "
+            f"opacity={self.opacity!r}>"
+        )
+
+
 class Scene:
     def __init__(self, core: _core.Scene) -> None:
         self._core = core
@@ -43,6 +139,19 @@ class Scene:
         return cls(_core.Scene.from_inline_sdf(sdf_text))
 
     # -- representations ----------------------------------------------------
+    @property
+    def representations(self) -> list[Representation]:
+        """Editable handles on the representations added so far, in order.
+
+        Indexable and iterable (``scene.representations[0]``, ``for rep in
+        scene.representations``); each item's style fields and selection can be
+        reassigned in place — see :class:`Representation`.
+        """
+        return [
+            Representation(self._core, i)
+            for i in range(self._core.num_representations())
+        ]
+
     def _add(
         self,
         kind: str,
