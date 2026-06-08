@@ -49,7 +49,16 @@ export interface GeomCamera {
  * clip). `extent` is `[half-width, half-height, half-depth]`; `aspect` is
  * width/height; `fovDeg` is the vertical field of view.
  */
-export function fitDistance(extent: Vec3, aspect: number, fovDeg: number): number {
+export function fitDistance(
+  extent: Vec3,
+  aspect: number,
+  fovDeg: number,
+): number {
+  // Guard against a degenerate viewport/FOV (e.g. zero-height container) that
+  // would make tan blow up to Infinity/NaN and fling the camera to nowhere.
+  if (!(aspect > 0) || !(fovDeg > 0 && fovDeg < 180)) {
+    return extent[2] + Math.max(extent[0], extent[1], 1);
+  }
   const tanV = Math.tan((fovDeg * Math.PI) / 360);
   const tanH = tanV * aspect;
   const distV = extent[1] / tanV + extent[2];

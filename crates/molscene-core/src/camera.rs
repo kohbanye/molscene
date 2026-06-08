@@ -139,9 +139,12 @@ fn jacobi_eigen(mut a: [[f64; 3]; 3]) -> ([f64; 3], [[f64; 3]; 3]) {
             if apq.abs() < 1e-18 {
                 continue;
             }
-            // Rotation that zeroes a[p][q].
+            // Rotation that zeroes a[p][q]. Treat theta == 0 (equal diagonal
+            // entries) as positive so we still get the 45° rotation that zeroes
+            // the off-diagonal — `signum` would hand back -1.0 for a -0.0 theta.
             let theta = (a[q][q] - a[p][p]) / (2.0 * apq);
-            let t = theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt());
+            let sign = if theta >= 0.0 { 1.0 } else { -1.0 };
+            let t = sign / (theta.abs() + (theta * theta + 1.0).sqrt());
             let c = 1.0 / (t * t + 1.0).sqrt();
             let s = t * c;
             let r = 3 - p - q; // the remaining index
@@ -258,6 +261,30 @@ mod tests {
         assert_eq!(centered.center, [5.0, 0.0, 0.0]);
         // Framing a subset is tighter than framing everything.
         assert!(centered.extent[0] < all.extent[0]);
+    }
+
+    #[test]
+    fn orient_handles_equal_variance_diagonal_cloud() {
+        // Points along the (1,1,0) diagonal: the covariance has equal diagonal
+        // entries (xx == yy) and a non-zero xy, so the Jacobi pivot hits
+        // theta == 0 — the case the rotation must still resolve.
+        let st = structure(&[
+            [-3.0, -3.0, 0.0],
+            [-1.0, -1.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [3.0, 3.0, 0.0],
+        ]);
+        let idx: Vec<usize> = (0..4).collect();
+        let cam = frame(&st, None, Some(&idx));
+        // The principal axis is the (1,1,0) diagonal; `right` aligns with it.
+        let inv_sqrt2 = 1.0 / 2.0_f32.sqrt();
+        assert!(
+            (cam.right[0].abs() - inv_sqrt2).abs() < 1e-3
+                && (cam.right[1].abs() - inv_sqrt2).abs() < 1e-3
+                && cam.right[2].abs() < 1e-3,
+            "right should lie on the (1,1,0) diagonal: {:?}",
+            cam.right
+        );
     }
 
     #[test]

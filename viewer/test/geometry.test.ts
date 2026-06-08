@@ -72,6 +72,13 @@ describe("fitDistance", () => {
     const deep = fitDistance([2, 2, 3], 1, 45);
     expect(deep - flat).toBeCloseTo(3, 4);
   });
+
+  it("returns a finite fallback for a degenerate viewport or FOV", () => {
+    // aspect 0 (zero-height container) and out-of-range FOV must not blow up.
+    expect(Number.isFinite(fitDistance([2, 3, 1], 0, 45))).toBe(true);
+    expect(Number.isFinite(fitDistance([2, 3, 1], 1, 0))).toBe(true);
+    expect(Number.isFinite(fitDistance([2, 3, 1], 1, 200))).toBe(true);
+  });
 });
 
 describe("cross", () => {

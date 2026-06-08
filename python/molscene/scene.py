@@ -101,7 +101,7 @@ class Scene:
     def center(self, selection: Selection | None = None) -> Scene:
         """Frame the view on a selection (still auto-fits the zoom)::
 
-            ms.load("1ubq").cartoon().center(ms.select.resi(50))
+        ms.load("1ubq").cartoon().center(ms.select.resi(50))
         """
         if selection is not None:
             self._core.set_center(_coerce(selection))

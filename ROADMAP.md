@@ -40,7 +40,7 @@ These constrain every milestone below:
   local file → parsed in Rust), `ms.select` DSL with `& | ~`, fluent API,
   `_repr_html_` / `show` / `export_html` via iframe srcdoc.
 - **Viewer** (`viewer/`): Three.js renderer — instanced spheres + cylinders,
-  bounding-sphere camera, OrbitControls; bundled offline (no CDN).
+  oriented-box auto-framing camera, OrbitControls; bundled offline (no CDN).
 - **Selections** (v0.2): a fully-evaluated selection language in Rust — boolean
   `and`/`or`/`not`, spatial `around`/`within`/`expand`/`beyond` (kiddo k-d tree),
   aggregation `byres`/`bychain`/`bymol`, numeric `b`/`q`, parsed from a string and
