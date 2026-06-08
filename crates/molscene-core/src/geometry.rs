@@ -64,18 +64,25 @@ impl Default for Mesh {
     }
 }
 
-/// Camera framing as a bounding sphere the renderer fits to.
+/// Camera framing as an oriented box the renderer fits to. `right`/`up` are the
+/// screen basis (unit vectors); the view direction is `right × up`. `extent` are
+/// the half-widths along `(right, up, forward)`, letting the renderer fit tightly
+/// per axis (aspect-aware) instead of to a loose bounding sphere.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeomCamera {
     pub center: [f32; 3],
-    pub radius: f32,
+    pub right: [f32; 3],
+    pub up: [f32; 3],
+    pub extent: [f32; 3],
 }
 
 impl Default for GeomCamera {
     fn default() -> Self {
         Self {
             center: [0.0, 0.0, 0.0],
-            radius: 1.0,
+            right: [1.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            extent: [1.0, 1.0, 1.0],
         }
     }
 }
@@ -210,7 +217,7 @@ fn resolve_scheme(scheme: ColorScheme, structure: &Structure, indices: &[usize])
     }
 }
 
-fn pos(a: &Atom) -> [f32; 3] {
+pub(crate) fn pos(a: &Atom) -> [f32; 3] {
     [a.x as f32, a.y as f32, a.z as f32]
 }
 
@@ -583,7 +590,12 @@ impl Scene {
             }
         }
 
-        g.camera = camera_for(structure);
+        // Camera framing: evaluate the optional center/orient selections, then
+        // compute an oriented box the renderer fits to.
+        let cam = self.camera();
+        let center_idx = cam.center.as_ref().map(|e| evaluate(structure, e));
+        let orient_idx = cam.orient.as_ref().map(|e| evaluate(structure, e));
+        g.camera = crate::camera::frame(structure, center_idx.as_deref(), orient_idx.as_deref());
         g
     }
 
@@ -609,39 +621,6 @@ impl Scene {
             }
         }
         map
-    }
-}
-
-/// Bounding-sphere camera over all atoms.
-fn camera_for(structure: &Structure) -> GeomCamera {
-    if structure.atoms.is_empty() {
-        return GeomCamera::default();
-    }
-    let mut min = [f32::MAX; 3];
-    let mut max = [f32::MIN; 3];
-    for a in &structure.atoms {
-        let p = pos(a);
-        for k in 0..3 {
-            min[k] = min[k].min(p[k]);
-            max[k] = max[k].max(p[k]);
-        }
-    }
-    let center = [
-        (min[0] + max[0]) * 0.5,
-        (min[1] + max[1]) * 0.5,
-        (min[2] + max[2]) * 0.5,
-    ];
-    let mut radius = 0.0f32;
-    for a in &structure.atoms {
-        let p = pos(a);
-        let d =
-            ((p[0] - center[0]).powi(2) + (p[1] - center[1]).powi(2) + (p[2] - center[2]).powi(2))
-                .sqrt();
-        radius = radius.max(d);
-    }
-    GeomCamera {
-        center,
-        radius: radius.max(1.0) + 2.0,
     }
 }
 

@@ -277,10 +277,28 @@ below.
   background; antialiasing. Renderer-local (`viewer/`) plus a small optional
   lighting/background channel on `GeometrySpec` — self-contained, one PR.
 
-## v0.7.2 — Camera framing (~1 PR)
+## v0.7.2 — Camera framing ✅ (shipped)
 
-- Better initial framing, fit modes, `center` / `orient`. Scoped to `Camera`
-  (`spec.rs`) and the viewer's camera setup.
+Better initial framing plus `center` / `orient`, scoped to the camera. The
+compiled camera (`GeomCamera`) went from a loose bounding **sphere** to an
+**oriented box** — `center` + a `right`/`up` screen basis + per-axis `extent`
+half-widths — so the renderer fits tightly and aspect-aware.
+
+- **`center` now actually frames a selection.** The `Camera.center` `Expr` was
+  declared but never evaluated; `geometry.rs` now evaluates it (and the new
+  `orient` selection) and a dedicated, WASM-safe `camera.rs` computes the box
+  over just those atoms (falls back to all atoms).
+- **`orient` (PyMOL-style).** A selection's principal axes (PCA via a self-
+  contained symmetric-3×3 Jacobi eigensolver in `camera.rs`) set the screen
+  basis: longest spread horizontal, next vertical. Exposed as `scene.orient(sel)`
+  through PyO3 and the facade, mirroring `center`.
+- **Aspect-aware fit in the viewer.** `fitDistance(extent, aspect, fov)` derives
+  the camera distance from the oriented box and the viewport aspect (horizontal
+  *and* vertical), so wide/tall viewports no longer clip; the camera positions
+  along `right × up` with `up` as its up-vector.
+
+**Deliverable:** `ms.load("1ubq").cartoon().center(ms.select.resi(50))` frames
+that residue, and `.orient(ms.select.protein())` lays the long axis horizontal.
 
 ## v0.7.3 — Cheap representations: lines & dots (~1 PR)
 

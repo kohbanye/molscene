@@ -104,10 +104,48 @@ def test_surface_over_cartoon_keeps_two_groups():
     assert geom["meshes"][1]["opacity"] == pytest.approx(0.3)
 
 
-def test_camera_is_bounding_sphere():
-    geom = ms.load(FIXTURE).spheres(ms.select.all()).to_geometry()
-    assert geom["camera"]["radius"] > 0
-    assert len(geom["camera"]["center"]) == 3
+def test_camera_is_oriented_box():
+    cam = ms.load(FIXTURE).spheres(ms.select.all()).to_geometry()["camera"]
+    assert len(cam["center"]) == 3
+    # Default orientation: identity screen basis.
+    assert cam["right"] == [1.0, 0.0, 0.0]
+    assert cam["up"] == [0.0, 1.0, 0.0]
+    assert len(cam["extent"]) == 3
+    assert all(e > 0 for e in cam["extent"])
+
+
+def test_center_returns_same_object():
+    scene = ms.load(FIXTURE)
+    assert scene.center(ms.select.protein()) is scene
+    assert scene.orient(ms.select.protein()) is scene
+
+
+def test_center_frames_only_the_selection():
+    full = ms.load(FIXTURE).spheres(ms.select.all()).to_geometry()["camera"]
+    # Centering on a single residue frames a tighter box than the whole scene.
+    one = (
+        ms.load(FIXTURE)
+        .spheres(ms.select.all())
+        .center(ms.select.resi(5))
+        .to_geometry()["camera"]
+    )
+    assert max(one["extent"]) <= max(full["extent"])
+
+
+def test_orient_rotates_the_screen_basis():
+    cam = (
+        ms.load(FIXTURE)
+        .spheres(ms.select.all())
+        .orient(ms.select.protein())
+        .to_geometry()["camera"]
+    )
+    # A non-identity orientation: the basis is no longer the world axes.
+    assert cam["right"] != [1.0, 0.0, 0.0] or cam["up"] != [0.0, 1.0, 0.0]
+    # Basis vectors stay unit length.
+    import math
+
+    for axis in (cam["right"], cam["up"]):
+        assert math.isclose(math.hypot(*axis), 1.0, abs_tol=1e-4)
 
 
 def test_unknown_representation_kind_rejected():
