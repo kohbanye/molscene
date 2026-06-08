@@ -23,6 +23,8 @@ pub struct Scene {
     representations: Vec<Representation>,
     colors: Vec<ColorAssignment>,
     camera: Camera,
+    /// Background color, parsed at set-time; `None` keeps the default (white).
+    background: Option<crate::color::Rgb>,
     /// Parsed coordinates, kept in memory for native geometry generation.
     structure: Option<Structure>,
 }
@@ -38,6 +40,7 @@ impl Scene {
             representations: Vec::new(),
             colors: Vec::new(),
             camera: Camera::default(),
+            background: None,
             structure: None,
         }
     }
@@ -125,6 +128,24 @@ impl Scene {
         self
     }
 
+    /// Set the scene background color (a named color or `#rrggbb`). Parsed at
+    /// set-time; an unrecognized color leaves the default (white).
+    pub fn background(&mut self, color: &str) -> &mut Self {
+        if let Some(rgb) =
+            crate::color::named_color(color).or_else(|| crate::color::parse_hex(color))
+        {
+            self.background = Some(rgb);
+        } else {
+            eprintln!("molscene: unknown background color {color:?}; keeping default.");
+        }
+        self
+    }
+
+    /// The background color, if one was set.
+    pub fn background_color(&self) -> Option<crate::color::Rgb> {
+        self.background
+    }
+
     /// Representations added so far.
     pub fn representations(&self) -> &[Representation] {
         &self.representations
@@ -191,6 +212,19 @@ mod tests {
         let mut scene = Scene::from_rcsb("1ubq");
         scene.center(Expr::Ligand);
         assert_eq!(scene.camera().center, Some(Expr::Ligand));
+    }
+
+    #[test]
+    fn background_parses_named_and_hex_and_keeps_default_on_unknown() {
+        let mut scene = Scene::from_rcsb("1ubq");
+        assert_eq!(scene.background_color(), None);
+        scene.background("black");
+        assert_eq!(scene.background_color(), Some([0.0, 0.0, 0.0]));
+        scene.background("#ff0000");
+        assert_eq!(scene.background_color(), Some([1.0, 0.0, 0.0]));
+        // An unrecognized color leaves the previous value untouched.
+        scene.background("definitely-not-a-color");
+        assert_eq!(scene.background_color(), Some([1.0, 0.0, 0.0]));
     }
 
     #[test]
