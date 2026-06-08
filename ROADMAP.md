@@ -338,12 +338,21 @@ that residue, and `.orient(ms.select.protein())` lays the long axis horizontal.
 - `Expr::Water` (water only) and `Expr::Ligand` (hetero minus water) keep their
   semantics — `Solvent` is an orthogonal lens layered on top, not a redefinition.
 
-## v0.7.5 — Labels & text annotations (~1 PR, heaviest)
+## v0.7.5 — Labels & text annotations ✅ (shipped)
 
-- Atom / residue labels drawn as Three.js sprites / `CanvasTexture` billboards,
-  driven by a new `labels` channel on `GeometrySpec`. Split out from the cheap-rep
-  line because it needs real text-rendering support in the renderer; sequenced
-  last in the v0.7.x line.
+- Atom / residue labels drawn as Three.js **sprites with a `CanvasTexture`**
+  (auto-billboarding so text stays readable as the camera orbits), driven by a
+  new **`labels` channel** on `GeometrySpec` (`Label { position, text, color,
+  size }`). The renderer only rasterizes glyphs; molscene picks position/text/
+  color in Rust (`geometry.rs`), keeping the molecule-agnostic renderer split.
+- **`scene.label(selection, text=…, color=…, size=…)`** through PyO3 + the
+  facade, defaulting to `ms.select.ligand()`. `text` selects the content:
+  `residue` (default → `"ALA42"` at the residue's Cα), `resn` / `resi` / `chain`
+  (one per residue) or `atom` / `element` (one per atom). Labels default to
+  black; `color` runs through the normal scheme machinery (and `set_color`
+  overrides still win); `size` is a font scale carried on `Style.scale`.
+- Split out from the cheap-rep line because it needs real text-rendering support
+  in the renderer; sequenced last in the v0.7.x line.
 
 ## v0.8 — WASM / pure-web
 
