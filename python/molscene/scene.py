@@ -98,6 +98,37 @@ class Scene:
         sel = selection if selection is not None else select.all()
         return self._add("spheres", sel, color=color, opacity=opacity, scale=scale)
 
+    def lines(
+        self,
+        selection: Selection | None = None,
+        *,
+        color=None,
+        opacity=None,
+        radius=None,
+    ) -> Scene:
+        """Thin bond lines (a cheap wireframe). Like ``sticks`` but without the
+        ball-and-stick atom caps; bond orders are still drawn::
+
+            ms.load("1ubq").lines(ms.select.protein())
+        """
+        sel = selection if selection is not None else select.all()
+        return self._add("lines", sel, color=color, opacity=opacity, radius=radius)
+
+    def dots(
+        self,
+        selection: Selection | None = None,
+        *,
+        color=None,
+        opacity=None,
+        scale=None,
+    ) -> Scene:
+        """A point cloud: a small sphere per atom (cheaper than ``spheres``)::
+
+            ms.load("1ubq").dots(ms.select.protein())
+        """
+        sel = selection if selection is not None else select.all()
+        return self._add("dots", sel, color=color, opacity=opacity, scale=scale)
+
     def center(self, selection: Selection | None = None) -> Scene:
         """Frame the view on a selection (still auto-fits the zoom)::
 
