@@ -105,11 +105,7 @@ class Scene:
         (``ms.select.all() & ~ms.select.solvent()``) so crystal waters and buffer
         ions aren't dumped into the view. Pass ``ms.select.all()`` (or
         ``ms.select.water()`` / ``ms.select.solvent()``) explicitly to show them."""
-        sel = (
-            selection
-            if selection is not None
-            else select.all() & ~select.solvent()
-        )
+        sel = selection if selection is not None else select.all() & ~select.solvent()
         return self._add("spheres", sel, color=color, opacity=opacity, scale=scale)
 
     def center(self, selection: Selection | None = None) -> Scene:
