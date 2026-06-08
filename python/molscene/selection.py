@@ -37,6 +37,11 @@ class _Select:
     def water(self) -> Selection:
         return _core.Selection.water()
 
+    def solvent(self) -> Selection:
+        """Water *and* common crystallographic ions (Na, Cl, Mg, SO4, …) — the
+        buffer/solvent that shouldn't land in the default view by accident."""
+        return _core.Selection.solvent()
+
     def hetero(self) -> Selection:
         return _core.Selection.hetero()
 

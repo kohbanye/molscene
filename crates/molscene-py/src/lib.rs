@@ -171,6 +171,10 @@ impl Selection {
         Selection::of(Expr::Water)
     }
     #[staticmethod]
+    fn solvent() -> Selection {
+        Selection::of(Expr::Solvent)
+    }
+    #[staticmethod]
     fn hetero() -> Selection {
         Selection::of(Expr::Hetero)
     }

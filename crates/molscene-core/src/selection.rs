@@ -21,6 +21,15 @@ use kiddo::{KdTree, SquaredEuclidean};
 use crate::structure::{Atom, Element, Structure};
 
 const WATER_RESNAMES: [&str; 6] = ["HOH", "WAT", "H2O", "TIP3", "TIP", "SOL"];
+/// Common crystallographic ions/solvent (PDB het codes). Best-effort, by residue
+/// name — like waters, these are buffer/crystallization additives that shouldn't
+/// land in the default view by accident. Not exhaustive; extend as needed.
+const ION_RESNAMES: [&str; 27] = [
+    // Monatomic cations.
+    "LI", "NA", "K", "RB", "CS", "MG", "CA", "SR", "BA", "MN", "FE", "FE2", "CO", "NI", "CU", "CU1",
+    "ZN", "CD", "HG", "AU", "AG", "PT", "AL", // Halides / common polyatomic anions.
+    "CL", "BR", "IOD", "SO4",
+];
 const BACKBONE_NAMES: [&str; 4] = ["N", "CA", "C", "O"];
 /// Standard DNA/RNA residue names (PDB), including the `D*` deoxy forms.
 const NUCLEIC_RESNAMES: [&str; 12] = [
@@ -30,6 +39,11 @@ const NUCLEIC_RESNAMES: [&str; 12] = [
 fn is_water(residue_name: &str) -> bool {
     let r = residue_name.trim().to_ascii_uppercase();
     WATER_RESNAMES.contains(&r.as_str())
+}
+
+fn is_ion(residue_name: &str) -> bool {
+    let r = residue_name.trim().to_ascii_uppercase();
+    ION_RESNAMES.contains(&r.as_str())
 }
 
 fn is_nucleic(residue_name: &str) -> bool {
@@ -109,7 +123,8 @@ pub enum Expr {
     Nucleic, // DNA/RNA by residue name (non-hetero)
     Hetero,  // hetero | hetatm
     Ligand,
-    Water, // water | solvent
+    Water,   // water (by residue name)
+    Solvent, // water | common crystallographic ions
     Hydrogen,
     Backbone,
     Sidechain,
@@ -207,6 +222,7 @@ impl fmt::Display for Expr {
             Expr::Hetero => write!(f, "hetero"),
             Expr::Ligand => write!(f, "ligand"),
             Expr::Water => write!(f, "water"),
+            Expr::Solvent => write!(f, "solvent"),
             Expr::Hydrogen => write!(f, "hydrogen"),
             Expr::Backbone => write!(f, "backbone"),
             Expr::Sidechain => write!(f, "sidechain"),
@@ -288,6 +304,7 @@ fn eval(expr: &Expr, structure: &Structure, ctx: &EvalCtx) -> Vec<bool> {
         Expr::Hetero => mask_from(&|a| a.hetero),
         Expr::Ligand => mask_from(&|a| a.hetero && !is_water(&a.residue_name)),
         Expr::Water => mask_from(&|a| is_water(&a.residue_name)),
+        Expr::Solvent => mask_from(&|a| is_water(&a.residue_name) || is_ion(&a.residue_name)),
         Expr::Hydrogen => mask_from(&|a| a.element == Element::H),
         Expr::Backbone => mask_from(&|a| !a.hetero && is_backbone(&a.name)),
         Expr::Sidechain => {
@@ -479,6 +496,9 @@ mod tests {
         assert_eq!(evaluate(&s, &Expr::Hetero), vec![4, 5]);
         assert_eq!(evaluate(&s, &Expr::Water), vec![4]);
         assert_eq!(evaluate(&s, &Expr::Ligand), vec![5]);
+        // Solvent = water | ions: the HOH oxygen and the FE ion. Ligand/Water are
+        // unchanged — Solvent is an orthogonal lens, so FE is both.
+        assert_eq!(evaluate(&s, &Expr::Solvent), vec![4, 5]);
         assert_eq!(evaluate(&s, &Expr::Backbone), vec![0, 1, 2]);
         // sidechain: non-hetero, non-backbone, non-hydrogen -> just CB.
         assert_eq!(evaluate(&s, &Expr::Sidechain), vec![3]);
@@ -609,6 +629,7 @@ mod tests {
     #[test]
     fn display_is_readable() {
         assert_eq!(Expr::Protein.to_string(), "protein");
+        assert_eq!(Expr::Solvent.to_string(), "solvent");
         assert_eq!(Expr::chain("A").to_string(), "chain A");
         assert_eq!(Expr::resi(10, 30).to_string(), "resi 10-30");
         assert_eq!(Expr::resi(42, 42).to_string(), "resi 42");

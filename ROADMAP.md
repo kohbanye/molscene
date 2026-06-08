@@ -323,10 +323,20 @@ that residue, and `.orient(ms.select.protein())` lays the long axis horizontal.
 **Deliverable:** `ms.load("1ubq").lines()` draws a cheap wireframe and
 `ms.load("1ubq").dots()` a point cloud. ✅
 
-## v0.7.4 — Water/solvent defaults (~1 PR)
+## v0.7.4 — Water/solvent defaults ✅ (shipped)
 
-- Sensible defaults so crystal waters aren't dumped into the view by accident.
-  Mostly selection defaults + docs — a small PR.
+- Sensible defaults so crystal waters and buffer ions aren't dumped into the view
+  by accident. A new **`solvent`** classification macro (`selection.rs`:
+  `Expr::Solvent`) matches **water OR common crystallographic ions** (a curated,
+  best-effort `ION_RESNAMES` het-code list — Na/K/Mg/Ca/Cl/Zn/SO4/… alongside the
+  existing water names), exposed as `ms.select.solvent()`.
+- **`spheres()` now defaults to "everything but solvent"**
+  (`ms.select.all() & ~ms.select.solvent()`) instead of `all()`, matching the
+  water-excluding defaults the other reps already had (`cartoon`/`surface` →
+  `protein`, `sticks` → `ligand`). Explicit selections always win, so
+  `spheres(ms.select.all())` (or `water()` / `solvent()`) still shows them.
+- `Expr::Water` (water only) and `Expr::Ligand` (hetero minus water) keep their
+  semantics — `Solvent` is an orthogonal lens layered on top, not a redefinition.
 
 ## v0.7.5 — Labels & text annotations (~1 PR, heaviest)
 
