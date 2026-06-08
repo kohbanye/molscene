@@ -1,10 +1,13 @@
-# molscene — pure-web demo
+# molscene web
 
-A browser page where **JavaScript builds a scene and renders it, with zero
-Python**. The Rust `molscene-core` engine is compiled to WebAssembly
-(`molscene-wasm`); JS calls the same typed `Scene` / `Selection` API the Python
-facade uses, compiles to a `GeometrySpec` in the browser, and hands that spec —
-the one and only serialized contract — to the existing Three.js viewer.
+A browser page where **JavaScript builds a scene and renders it**. The Rust
+`molscene-core` engine is compiled to WebAssembly (`molscene-wasm`); JS calls
+the same typed `Scene` / `Selection` API the Python facade uses, compiles to a
+`GeometrySpec` in the browser, and hands that spec — the one and only
+serialized contract — to the existing Three.js viewer.
+
+You can also **upload a PDB or SDF file** from the page to view your own
+structures; the file is parsed in WASM and never leaves the browser.
 
 ```
 web/index.html ──> ./viewer.js               (renderGeometry; copied by build.sh)
@@ -55,7 +58,9 @@ python3 -m http.server 8000 --directory web
 
 The demo fetches `1UBQ` from RCSB (CORS-enabled) and draws a **cartoon** in the
 browser. If the network is unavailable it falls back to an embedded benzene SDF
-drawn as aromatic **sticks** — both built entirely in WASM.
+drawn as aromatic **sticks** — both built entirely in WASM. Use the **Upload
+PDB or SDF…** button to load your own file (extension picks the parser: `.sdf` /
+`.mol` → sticks, anything else → PDB cartoon + sticks).
 
 ## Notes
 

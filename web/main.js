@@ -7,6 +7,7 @@ import init, { Scene, Selection, version } from "./pkg/molscene_wasm.js";
 
 const statusEl = document.getElementById("status");
 const viewport = document.getElementById("viewport");
+const fileInput = document.getElementById("file");
 const setStatus = (msg) => {
   statusEl.textContent = msg;
 };
@@ -44,9 +45,31 @@ aromatic ring demo
 M  END
 `;
 
+// The current Three.js renderer, kept so a re-render (e.g. an upload) can tear
+// down the previous one — renderGeometry only appends a canvas and starts its
+// own animation loop, so without this the old scene stays on screen.
+let currentRenderer = null;
+
 function render(scene) {
   const spec = JSON.parse(scene.toGeometryJson()); // the only wire format
-  window.molscene.renderGeometry(viewport, spec);
+  if (currentRenderer) {
+    currentRenderer.setAnimationLoop(null);
+    currentRenderer.dispose();
+    currentRenderer.domElement.remove();
+    currentRenderer = null;
+  }
+  viewport.replaceChildren();
+  currentRenderer = window.molscene.renderGeometry(viewport, spec);
+}
+
+// Cartoon for the protein chains, sticks for everything else that isn't water.
+// Works for full structures and bare small molecules alike.
+function drawStructure(scene) {
+  scene.representation("cartoon", Selection.protein(), "spectrum");
+  const rest = Selection.protein().not().and(Selection.water().not());
+  scene.representation("sticks", rest, "element");
+  scene.setBackground("white");
+  render(scene);
 }
 
 // Protein hero: fetch a PDB from RCSB (CORS-enabled) and draw a cartoon.
@@ -69,6 +92,39 @@ function renderBenzene() {
   render(scene);
   setStatus("benzene (embedded SDF) — aromatic sticks, built in WASM.");
 }
+
+// Build a scene from an uploaded file. The extension picks the parser: SDF /
+// MOL molfiles carry explicit bond orders; everything else is treated as PDB.
+function renderUpload(name, text) {
+  const isSdf = /\.(sdf|mol)$/i.test(name);
+  try {
+    if (isSdf) {
+      const scene = Scene.fromInlineSdf(text);
+      scene.representation("sticks", Selection.all(), "element");
+      scene.setBackground("white");
+      render(scene);
+      setStatus(`${name}: sticks (element) — built in WASM.`);
+    } else {
+      const scene = Scene.fromInlinePdb(text);
+      drawStructure(scene);
+      setStatus(`${name}: cartoon (spectrum) + sticks — built in WASM.`);
+    }
+  } catch (err) {
+    console.error("failed to render upload:", err);
+    setStatus(`Could not parse ${name}: ${err}`);
+  }
+}
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+  setStatus(`reading ${file.name}…`);
+  const reader = new FileReader();
+  reader.onload = () => renderUpload(file.name, String(reader.result));
+  reader.onerror = () => setStatus(`Could not read ${file.name}.`);
+  reader.readAsText(file);
+  fileInput.value = ""; // allow re-uploading the same file
+});
 
 async function main() {
   await init();

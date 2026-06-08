@@ -200,12 +200,13 @@ export function renderGeometry(
   controls.target.copy(target);
   controls.update();
 
-  const animate = () => {
-    requestAnimationFrame(animate);
+  // Drive the loop through the renderer so a caller that re-renders into the
+  // same element can stop it with `renderer.setAnimationLoop(null)` before
+  // disposing — a bare requestAnimationFrame recursion can't be cancelled.
+  renderer.setAnimationLoop(() => {
     controls.update();
     renderer.render(scene, camera);
-  };
-  animate();
+  });
 
   return renderer;
 }
