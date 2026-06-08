@@ -523,6 +523,7 @@ mod tests {
 
     /// The original naive all-pairs scan, kept as a correctness oracle for the
     /// cell-grid implementation. Must stay byte-for-byte equivalent in result.
+    #[allow(clippy::needless_range_loop)] // intentional all-pairs reference scan
     fn bonds_n2(atoms: &[Atom]) -> Vec<(usize, usize)> {
         let mut bonds = Vec::new();
         for i in 0..atoms.len() {
