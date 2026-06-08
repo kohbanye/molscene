@@ -44,7 +44,9 @@ addopts = "-m 'not network'"
 
 [tool.ruff]
 target-version = "py310"
-extend-exclude = ["python/molscene/_static"]
+# _static is the bundled JS; _core/ is the pyo3-stub-gen output (regenerated
+# verbatim and checked for drift in CI, so ruff must not reformat it).
+extend-exclude = ["python/molscene/_static", "python/molscene/_core"]
 
 [tool.ruff.lint]
 # pycodestyle errors (E), Pyflakes (F), isort (I), pyupgrade (UP), flake8-bugbear (B).

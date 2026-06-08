@@ -8,7 +8,9 @@ description = "PyO3 bindings for molscene-core (builds the molscene._core extens
 
 [lib]
 name = "_core"
-crate-type = ["cdylib"]
+# `rlib` (alongside the `cdylib` extension module) lets the `stub_gen` binary
+# link the crate to reach the stub-info gatherer.
+crate-type = ["cdylib", "rlib"]
 # No Rust tests here (logic lives in molscene-core). Disabling the test target
 # keeps `cargo test --workspace` from building a binary that must link libpython
 # without the `extension-module` feature.
@@ -19,8 +21,23 @@ doctest = false
 molscene-core = { workspace = true }
 serde_json = { workspace = true }
 pyo3 = { version = "0.28" }
+# Drives the auto-generated type stubs (python/molscene/_core.pyi). The
+# `#[gen_stub_*]` macros register signatures via `inventory`; the `stub_gen`
+# binary below emits the .pyi.
+pyo3-stub-gen = "0.22"
 
 [features]
 # Enabled by maturin for wheel builds; left off for `cargo test` so the crate
 # does not require linking libpython during workspace builds.
 extension-module = ["pyo3/extension-module"]
+# Gates the `stub_gen` binary so plain `cargo test/clippy --workspace` (no
+# Python toolchain assumed) never tries to build it.
+stub-gen = []
+
+# Regenerates python/molscene/_core.pyi from the live PyO3 signatures. Gated by
+# `required-features` so it is skipped unless explicitly requested:
+#   cargo run -p molscene-py --features stub-gen --bin stub_gen
+[[bin]]
+name = "stub_gen"
+required-features = ["stub-gen"]
+doc = false

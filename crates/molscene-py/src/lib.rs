@@ -12,6 +12,7 @@ use molscene_core::spec::{RepresentationKind, Source, Style};
 use molscene_core::{CmpOp, Expr, NumField};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
 fn kind_name(kind: RepresentationKind) -> &'static str {
     match kind {
@@ -43,11 +44,13 @@ fn parse_kind(kind: &str) -> PyResult<RepresentationKind> {
 }
 
 /// A molecular scene. Wraps `molscene_core::Scene`.
+#[gen_stub_pyclass]
 #[pyclass(module = "molscene._core")]
 pub struct Scene {
     inner: CoreScene,
 }
 
+#[gen_stub_pymethods]
 #[pymethods]
 impl Scene {
     /// Build a scene from PDB text fetched for an RCSB `id`.
@@ -243,6 +246,7 @@ fn index_error(index: usize, len: usize) -> PyErr {
 /// A selection — a wrapper over a core [`Expr`]. Built through the constructor
 /// staticmethods (the `ms.select` DSL) and composed with the boolean operators
 /// (`& | ~`). Valid by construction; there is no selection string.
+#[gen_stub_pyclass]
 #[pyclass(module = "molscene._core", skip_from_py_object)]
 #[derive(Clone)]
 pub struct Selection {
@@ -255,6 +259,7 @@ impl Selection {
     }
 }
 
+#[gen_stub_pymethods]
 #[pymethods]
 impl Selection {
     // -- classification macros ----------------------------------------------
@@ -411,4 +416,14 @@ fn _core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Scene>()?;
     m.add_class::<Selection>()?;
     Ok(())
+}
+
+/// Gathers the `#[gen_stub_*]`-registered signatures into a [`StubInfo`], using
+/// the workspace-root `pyproject.toml` (two levels up from this crate) for the
+/// maturin layout — `module-name = "molscene._core"` and `python-source =
+/// "python"` — so the `.pyi` lands at `python/molscene/_core.pyi`. The
+/// `stub_gen` binary calls this and writes the stubs.
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::generate::StubInfo> {
+    let pyproject = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../pyproject.toml");
+    pyo3_stub_gen::generate::StubInfo::from_pyproject_toml(pyproject)
 }

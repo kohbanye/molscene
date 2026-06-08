@@ -106,6 +106,11 @@ pytest -m "not network"                         # unit tests (offline, use fixtu
 pytest -m network                               # exercises the RCSB fetch path
 pytest tests/test_selection.py::test_and_operator
 
+# Type stubs (python/molscene/_core/__init__.pyi) are pyo3-stub-gen output, not
+# hand-written. After changing the PyO3 API surface, regenerate + commit them
+# (CI fails on drift). Run from the repo root:
+cargo run -p molscene-py --features stub-gen --bin stub_gen
+
 # WASM / pure-web (browser scene engine + demo)
 rustup target add wasm32-unknown-unknown        # one-time
 cargo build -p molscene-wasm --target wasm32-unknown-unknown   # quick compile check
