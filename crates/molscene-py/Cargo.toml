@@ -20,7 +20,9 @@ doctest = false
 [dependencies]
 molscene-core = { workspace = true }
 serde_json = { workspace = true }
-pyo3 = { version = "0.28" }
+# `abi3-py310` builds against the stable ABI (matching requires-python >=3.10),
+# so a single wheel per platform covers all supported CPython versions.
+pyo3 = { version = "0.28", features = ["abi3-py310"] }
 # Drives the auto-generated type stubs (python/molscene/_core.pyi). The
 # `#[gen_stub_*]` macros register signatures via `inventory`; the `stub_gen`
 # binary below emits the .pyi.
