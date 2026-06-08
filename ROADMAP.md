@@ -354,18 +354,36 @@ that residue, and `.orient(ms.select.protein())` lays the long axis horizontal.
 - Split out from the cheap-rep line because it needs real text-rendering support
   in the renderer; sequenced last in the v0.7.x line.
 
-## v0.8 — WASM / pure-web
+## v0.8 — WASM / pure-web ✅ (shipped)
 
-Prove the dual-core thesis.
+Proves the dual-core thesis: the same Rust core drives both Python and the browser.
 
-- Flesh out `molscene-wasm` (wasm-bindgen): build a `Scene` through the same typed
-  API and run `to_geometry` entirely in the browser, no Python.
-- A **web demo page** consuming the WASM core + the existing `viewer/` renderer.
+- **`molscene-wasm` fleshed out** (wasm-bindgen): a `Scene` + `Selection` mirroring
+  the PyO3 bindings exactly — the same typed API (representation builders, camera
+  `center`/`orient`, `set_color`, `background`, the full `ms.select` constructor set)
+  with `and`/`or`/`not` methods standing in for Python's `& | ~`. `to_geometry`
+  runs entirely in the browser; the compiled `GeometrySpec` crosses to JS as the
+  **same JSON string** the Python iframe uses (`toGeometryJson` → `JSON.parse`).
+- **Full parse path in the browser — no hand-written parser.** The blocker was
+  pdbtbx pulling `rayon` (threads, unavailable on `wasm32-unknown-unknown`). But
+  `rayon` is an *optional* pdbtbx dependency behind cfg-gated parallel methods we
+  never call, so `molscene-core` now pulls pdbtbx with `default-features = false`
+  (keeping only the WASM-safe `compression`/miniz_oxide). This is a no-op natively
+  (we only use `ReadOptions::read_raw` + the base hierarchy API) and lets
+  **PDB / mmCIF / SDF** parse in the browser. `kiddo` is already WASM-safe (it gates
+  its native `generator` dep to x86_64/aarch64).
+- A **web demo page** (`web/`) consuming the WASM core + the existing `viewer/`
+  renderer (the prebuilt IIFE bundle, reused as-is — no second bundler). It fetches
+  a PDB from RCSB in-browser and draws a **cartoon**, falling back to an embedded
+  benzene SDF (aromatic sticks) offline.
+- A **CI smoke job** builds the wasm crate (`wasm-pack --target web`), guarding the
+  WASM-safe core against a future dependency bump. `wasm-opt` is disabled so the
+  build needs no network fetch of binaryen.
 - Same `GeometrySpec` contract drives both Python-notebook and pure-web paths — and
   it remains the *only* serialized format on either path.
 
 **Deliverable:** a browser page where JS builds a scene and renders it — zero
-Python.
+Python. ✅
 
 ## v1.0 — Distribution & ergonomics
 

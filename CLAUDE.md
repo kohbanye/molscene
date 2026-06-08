@@ -21,7 +21,10 @@ Three Rust crates + a Python facade + a TypeScript viewer:
   (in-memory `Scene` model — built fluently, not serialized), `geometry` (compiles
   a `Scene` into a `GeometrySpec` draw list).
 - `crates/molscene-py` — thin PyO3 bindings → the `molscene._core` extension module.
-- `crates/molscene-wasm` — wasm-bindgen bindings (stub today; the pure-web path).
+- `crates/molscene-wasm` — wasm-bindgen bindings → the browser scene engine
+  (mirrors the PyO3 `Scene`/`Selection`; `and`/`or`/`not` methods replace `& | ~`).
+  Drives the `web/` demo: JS builds a `Scene`, compiles `to_geometry` in WASM, and
+  the existing `viewer/` bundle renders the resulting `GeometrySpec` — zero Python.
 - `python/molscene` — fluent facade (`load`, `Scene`, `ms.select` DSL, notebook display).
 - `viewer/` — Three.js adapter that draws a `GeometrySpec` (instanced meshes).
 
@@ -48,9 +51,14 @@ scene.show()/_repr_html_ # scene.py → _core.to_geometry_json()
 - **Geometry is lazy.** `.sticks()` etc. only record intent; geometry is computed once
   at display time in `to_geometry`.
 - **WASM-safe core.** `geometry` / `color` / `selection` / `structure` are pure compute
-  and compile to WASM; only `parse` (pdbtbx, uses rayon/`std::fs`) is gated behind the
-  `parse` feature and excluded from `molscene-wasm`. Keep new processing code in this
-  pure set unless it genuinely needs parsing.
+  and compile to WASM. The whole `parse` path compiles to WASM too: `molscene-core`
+  pulls pdbtbx with `default-features = false` (dropping its optional `rayon` — the one
+  thread-dependent blocker — plus `rstar`/`serde`, all unused; `compression`/miniz_oxide
+  is kept and is WASM-safe), and we only call `ReadOptions::read_raw` (in-memory, no
+  `std::fs`). `kiddo` is WASM-safe because it gates its native `generator` dep to
+  x86_64/aarch64. Don't reintroduce a hard dependency on rayon or the rayon `par_iter`
+  pdbtbx methods, or call pdbtbx's file-path `read` — that would break the wasm build
+  (the CI `wasm` smoke job guards this).
 - **Network only in Python `load`.** RCSB fetch happens there; nothing else touches the
   network.
 
@@ -97,6 +105,12 @@ maturin develop                                 # build molscene._core + install
 pytest -m "not network"                         # unit tests (offline, use fixtures)
 pytest -m network                               # exercises the RCSB fetch path
 pytest tests/test_selection.py::test_and_operator
+
+# WASM / pure-web (browser scene engine + demo)
+rustup target add wasm32-unknown-unknown        # one-time
+cargo build -p molscene-wasm --target wasm32-unknown-unknown   # quick compile check
+./web/build.sh                                  # viewer bundle + wasm-pack → web/pkg
+python3 -m http.server 8000                     # open http://localhost:8000/web/index.html
 ```
 
 ### Gotchas

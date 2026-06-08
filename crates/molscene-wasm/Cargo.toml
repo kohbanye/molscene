@@ -4,14 +4,31 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "wasm-bindgen bindings for molscene-core (browser scene engine — v0.4)."
+description = "wasm-bindgen bindings for molscene-core (browser scene engine)."
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+# Skip the wasm-opt post-pass: it downloads a binaryen release at build time,
+# which fails in network-restricted environments (incl. CI). The unoptimized
+# module is larger but builds deterministically; size optimization can be a
+# follow-up once a vendored binaryen is available.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[features]
+default = ["console_error_panic_hook"]
+# Surface Rust panics in the browser console (small size cost; dev ergonomics).
+console_error_panic_hook = ["dep:console_error_panic_hook"]
+
 [dependencies]
-# WASM build excludes the `parse` feature (pdbtbx uses rayon/std::fs), so the
-# path dependency is declared directly to honor `default-features = false`.
-molscene-core = { path = "../molscene-core", default-features = false }
+# The full `parse` path (PDB / mmCIF / SDF) is WASM-safe: pdbtbx is pulled with
+# `default-features = false` in molscene-core (no rayon), and kiddo drops its
+# native-only `generator` dep on wasm. So the browser gets the same parsing the
+# Python build has — no hand-written parser.
+molscene-core = { path = "../molscene-core", default-features = false, features = [
+    "parse",
+] }
 serde_json = { workspace = true }
 wasm-bindgen = "0.2"
+console_error_panic_hook = { version = "0.1", optional = true }

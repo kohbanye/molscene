@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>molscene — pure-web demo</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font-family: system-ui, sans-serif;
+      }
+      #viewport {
+        position: absolute;
+        inset: 0;
+      }
+      #panel {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.85);
+        padding: 10px 12px;
+        border-radius: 8px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+        max-width: 320px;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      #panel h1 {
+        font-size: 15px;
+        margin: 0 0 4px;
+      }
+      #status {
+        color: #555;
+      }
+      #panel code {
+        background: #eee;
+        padding: 0 3px;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="panel">
+      <h1>molscene · pure-web</h1>
+      <div>
+        The Rust core runs in your browser via WebAssembly — JavaScript builds
+        the <code>Scene</code> and compiles the geometry. Zero Python.
+      </div>
+      <div id="status">loading…</div>
+    </div>
+    <div id="viewport"></div>
+
+    <!-- The Three.js viewer IIFE (copied next to this page by web/build.sh).
+         Exposes window.molscene.renderGeometry(element, spec). -->
+    <script src="./viewer.js"></script>
+    <!-- The demo driver: imports the wasm-pack ES module from ./pkg. -->
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
