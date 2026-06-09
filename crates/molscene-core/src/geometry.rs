@@ -14,7 +14,7 @@ use crate::color::{
     chain_color, colormap_color, element_color, spectrum_color, ColorScheme, PropertyField, Rgb,
 };
 use crate::scene::Scene;
-use crate::selection::evaluate;
+use crate::selection::EvalCtx;
 use crate::spec::RepresentationKind;
 use crate::structure::{vdw_radius, Atom, Element, Structure};
 
@@ -537,13 +537,17 @@ impl Scene {
         };
 
         let ctx = ColorCtx::new(structure);
-        let overrides = self.color_overrides(structure);
+        // One selection context for the whole compile: the k-d tree and
+        // connected components are built at most once and shared across every
+        // representation, color override, and the camera selections below.
+        let sel = EvalCtx::new(structure);
+        let overrides = self.color_overrides(structure, &sel);
         // Perceived bonds + rings, computed lazily on the first sticks rep so
         // cartoon-/surface-only scenes don't pay for ring perception.
         let mut perception: Option<crate::chem::Perception> = None;
 
         for rep in self.representations() {
-            let indices = evaluate(structure, &rep.selection);
+            let indices = sel.evaluate(&rep.selection);
             // The representation's base scheme, with any auto property range
             // resolved over the atoms it colors.
             let base = resolve_scheme(scheme_of(&rep.style), structure, &indices);
@@ -787,8 +791,8 @@ impl Scene {
         // Camera framing: evaluate the optional center/orient selections, then
         // compute an oriented box the renderer fits to.
         let cam = self.camera();
-        let center_idx = cam.center.as_ref().map(|e| evaluate(structure, e));
-        let orient_idx = cam.orient.as_ref().map(|e| evaluate(structure, e));
+        let center_idx = cam.center.as_ref().map(|e| sel.evaluate(e));
+        let orient_idx = cam.orient.as_ref().map(|e| sel.evaluate(e));
         g.camera = crate::camera::frame(structure, center_idx.as_deref(), orient_idx.as_deref());
         g
     }
@@ -801,14 +805,14 @@ impl Scene {
     /// A per-atom explicit-color override map built from the scene's
     /// `set_color` assignments, applied in order (last write wins). `None` means
     /// the atom keeps whatever scheme its representation uses.
-    fn color_overrides(&self, structure: &Structure) -> Vec<Option<ColorScheme>> {
+    fn color_overrides(&self, structure: &Structure, sel: &EvalCtx) -> Vec<Option<ColorScheme>> {
         if self.color_assignments().is_empty() {
             return Vec::new();
         }
         let mut map = vec![None; structure.atoms.len()];
         for assignment in self.color_assignments() {
             let scheme = ColorScheme::parse(&assignment.color);
-            let indices = evaluate(structure, &assignment.selection);
+            let indices = sel.evaluate(&assignment.selection);
             let scheme = resolve_scheme(scheme, structure, &indices);
             for i in indices {
                 map[i] = Some(scheme);

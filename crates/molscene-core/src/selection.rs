@@ -12,7 +12,7 @@
 //! (`Expr::chain("A").and(Expr::Protein)`); a `Display` impl renders a readable
 //! form for debugging only (it is not a canonical, re-parseable representation).
 
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::collections::HashSet;
 use std::fmt;
 
@@ -257,28 +257,45 @@ impl fmt::Display for Expr {
 // ---------------------------------------------------------------------------
 
 /// Resolve a selection [`Expr`] to the matching atom indices (sorted ascending).
+///
+/// Convenience wrapper that builds a fresh [`EvalCtx`]. When resolving several
+/// selections against the same structure (e.g. across a `to_geometry` compile),
+/// build one [`EvalCtx`] and call [`EvalCtx::evaluate`] so the k-d tree and
+/// connected-component caches are shared.
 pub fn evaluate(structure: &Structure, expr: &Expr) -> Vec<usize> {
-    let ctx = EvalCtx::new(structure);
-    let mask = eval(expr, structure, &ctx);
-    mask.iter()
-        .enumerate()
-        .filter_map(|(i, &b)| b.then_some(i))
-        .collect()
+    EvalCtx::new(structure).evaluate(expr)
 }
 
-/// Shared, lazily-built state for a single evaluation pass.
-struct EvalCtx<'a> {
+/// Shared, lazily-built state for evaluating selections against one structure.
+///
+/// Reuse a single context across multiple [`evaluate`](EvalCtx::evaluate) calls
+/// to amortize the cost of the k-d tree and union-find components — both are
+/// built at most once and shared across every spatial / `bymol` node.
+pub struct EvalCtx<'a> {
     structure: &'a Structure,
     /// `atom index -> connected-component id`, built once on first `bymol`.
     components: RefCell<Option<Vec<usize>>>,
+    /// k-d tree over all atom coordinates, built once on first spatial operator.
+    tree: RefCell<Option<KdTree<f64, 3>>>,
 }
 
 impl<'a> EvalCtx<'a> {
-    fn new(structure: &'a Structure) -> Self {
+    pub fn new(structure: &'a Structure) -> Self {
         EvalCtx {
             structure,
             components: RefCell::new(None),
+            tree: RefCell::new(None),
         }
+    }
+
+    /// Resolve `expr` to matching atom indices (sorted ascending), reusing this
+    /// context's caches.
+    pub fn evaluate(&self, expr: &Expr) -> Vec<usize> {
+        let mask = eval(expr, self.structure, self);
+        mask.iter()
+            .enumerate()
+            .filter_map(|(i, &b)| b.then_some(i))
+            .collect()
     }
 
     /// Connected components over inferred bonds (cached).
@@ -289,6 +306,19 @@ impl<'a> EvalCtx<'a> {
             *self.components.borrow_mut() = Some(comp);
         }
         self.components.borrow().clone().unwrap()
+    }
+
+    /// k-d tree over every atom (cached).
+    fn tree(&self) -> Ref<'_, KdTree<f64, 3>> {
+        if self.tree.borrow().is_none() {
+            let n = self.structure.atoms.len();
+            let mut tree: KdTree<f64, 3> = KdTree::with_capacity(n);
+            for (i, a) in self.structure.atoms.iter().enumerate() {
+                tree.add(&[a.x, a.y, a.z], i as u64);
+            }
+            *self.tree.borrow_mut() = Some(tree);
+        }
+        Ref::map(self.tree.borrow(), |o| o.as_ref().unwrap())
     }
 }
 
@@ -347,20 +377,23 @@ fn eval(expr: &Expr, structure: &Structure, ctx: &EvalCtx) -> Vec<bool> {
         }
         Expr::Within(r, inner) => {
             let s = eval(inner, structure, ctx);
-            within_mask(structure, &s, *r)
+            within_mask(ctx, structure, &s, *r)
         }
         Expr::Expand(r, inner) => {
             let s = eval(inner, structure, ctx);
-            within_mask(structure, &s, *r)
+            within_mask(ctx, structure, &s, *r)
         }
         Expr::Around(r, inner) => {
             let s = eval(inner, structure, ctx);
-            let w = within_mask(structure, &s, *r);
+            let w = within_mask(ctx, structure, &s, *r);
             zip_mask(w, s, |inside, seed| inside && !seed)
         }
         Expr::Beyond(r, inner) => {
             let s = eval(inner, structure, ctx);
-            within_mask(structure, &s, *r).iter().map(|b| !b).collect()
+            within_mask(ctx, structure, &s, *r)
+                .iter()
+                .map(|b| !b)
+                .collect()
         }
     }
 }
@@ -378,16 +411,13 @@ fn residue_key(a: &Atom) -> (String, i32, String) {
 }
 
 /// Atoms within `r` Å of any seeded atom (the seeds themselves included).
-fn within_mask(structure: &Structure, seeds: &[bool], r: f64) -> Vec<bool> {
+fn within_mask(ctx: &EvalCtx, structure: &Structure, seeds: &[bool], r: f64) -> Vec<bool> {
     let n = structure.atoms.len();
     let mut mask = vec![false; n];
     if r < 0.0 || !seeds.iter().any(|&b| b) {
         return mask;
     }
-    let mut tree: KdTree<f64, 3> = KdTree::with_capacity(n);
-    for (i, a) in structure.atoms.iter().enumerate() {
-        tree.add(&[a.x, a.y, a.z], i as u64);
-    }
+    let tree = ctx.tree();
     let r2 = r * r;
     for i in selected(seeds) {
         let a = &structure.atoms[i];
