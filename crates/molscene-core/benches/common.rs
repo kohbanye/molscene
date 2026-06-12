@@ -38,3 +38,27 @@ pub fn lattice(n: usize) -> Structure {
     }
     Structure::new(atoms)
 }
+
+/// Like [`lattice`], but with a tiny deterministic per-atom jitter so no two
+/// atoms share an exact axis coordinate. A perfect grid puts hundreds of atoms
+/// on the same plane, which overflows the k-d tree's leaf buckets at build time;
+/// real PDB coordinates (floats) never collide like that. Use this for spatial
+/// selection benches, which build the tree.
+// `common.rs` is shared via `#[path]` by every bench; not all of them use this.
+#[allow(dead_code)]
+pub fn lattice_jittered(n: usize) -> Structure {
+    let mut s = lattice(n);
+    for (i, a) in s.atoms.iter_mut().enumerate() {
+        // Distinct offsets per atom (sub-0.05 Å so neighbor relationships and
+        // bond inference are unchanged), derived from the index — no RNG dep.
+        let j = i as f64;
+        a.x += (j * 0.0011).fract() * 0.04;
+        a.y += (j * 0.0023).fract() * 0.04;
+        a.z += (j * 0.0037).fract() * 0.04;
+        // Sequential residue ids let a bench pick a small seed set (a short
+        // `resi` range) without touching coordinates — so the spatial bench can
+        // exercise the case where the one-time tree build dominates each call.
+        a.residue_seq = i as i32 + 1;
+    }
+    s
+}
