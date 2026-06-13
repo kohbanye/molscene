@@ -92,6 +92,64 @@ function instancedMesh(
   return mesh;
 }
 
+/**
+ * Render one frame with a transparent background and download it as a PNG.
+ *
+ * The animation loop is paused first so the visible (opaque-background) frame
+ * doesn't overwrite the drawing buffer before `toBlob` reads it. Setting
+ * `scene.background = null` lets the renderer clear to its transparent clear
+ * color (alpha 0, the default for an `alpha: true` context), so the saved image
+ * has an alpha channel instead of a solid backdrop.
+ */
+function savePng(
+  renderer: THREE.WebGLRenderer,
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+  loop: () => void,
+): void {
+  const prevBackground = scene.background;
+  scene.background = null;
+  renderer.setAnimationLoop(null);
+  renderer.render(scene, camera);
+  renderer.domElement.toBlob((blob) => {
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "molscene.png";
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+    scene.background = prevBackground;
+    renderer.setAnimationLoop(loop);
+  }, "image/png");
+}
+
+/** Overlay a small "PNG" button in the top-right corner of `element`. */
+function addSaveButton(element: HTMLElement, onClick: () => void): void {
+  if (getComputedStyle(element).position === "static") {
+    element.style.position = "relative";
+  }
+  const button = document.createElement("button");
+  button.textContent = "PNG";
+  button.title = "Save as PNG (transparent background)";
+  Object.assign(button.style, {
+    position: "absolute",
+    top: "8px",
+    right: "8px",
+    zIndex: "10",
+    padding: "4px 10px",
+    font: "12px sans-serif",
+    cursor: "pointer",
+    background: "rgba(255,255,255,0.85)",
+    border: "1px solid #ccc",
+    borderRadius: "6px",
+    color: "#333",
+  } satisfies Partial<CSSStyleDeclaration>);
+  button.addEventListener("click", onClick);
+  element.appendChild(button);
+}
+
 /** Render a geometry spec into `element`. Returns the renderer for disposal. */
 export function renderGeometry(
   element: HTMLElement,
@@ -189,7 +247,14 @@ export function renderGeometry(
   );
   camera.lookAt(target);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    // alpha + preserveDrawingBuffer let the "PNG" button capture the canvas:
+    // alpha makes the buffer transparent when the scene background is cleared,
+    // and preserveDrawingBuffer keeps it readable by toBlob after the frame.
+    alpha: true,
+    preserveDrawingBuffer: true,
+  });
   // Cap the device pixel ratio: MSAA already smooths edges, so rendering at
   // 3x+ on hi-DPI displays just wastes fill rate.
   renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2));
@@ -203,10 +268,14 @@ export function renderGeometry(
   // Drive the loop through the renderer so a caller that re-renders into the
   // same element can stop it with `renderer.setAnimationLoop(null)` before
   // disposing — a bare requestAnimationFrame recursion can't be cancelled.
-  renderer.setAnimationLoop(() => {
+  // Named so the PNG capture can pause and resume it.
+  const loop = () => {
     controls.update();
     renderer.render(scene, camera);
-  });
+  };
+  renderer.setAnimationLoop(loop);
+
+  addSaveButton(element, () => savePng(renderer, scene, camera, loop));
 
   return renderer;
 }
