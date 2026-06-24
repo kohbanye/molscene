@@ -155,9 +155,11 @@ canvas.addEventListener("pointermove", (e) => {
   lastX = e.clientX;
   lastY = e.clientY;
   camera.yaw -= dx * 0.01;
-  // Clamp pitch so the view can't flip past the poles.
+  // Clamp pitch so the view can't flip past the poles. Subtract dy so a
+  // downward drag tilts the molecule's top toward the viewer (grab/trackball
+  // feel), matching the horizontal yaw convention instead of inverting it.
   const limit = Math.PI / 2 - 0.01;
-  camera.pitch = Math.max(-limit, Math.min(limit, camera.pitch + dy * 0.01));
+  camera.pitch = Math.max(-limit, Math.min(limit, camera.pitch - dy * 0.01));
   draw();
 });
 const endDrag = () => {
