@@ -12,7 +12,7 @@ Drag to orbit, scroll to zoom, and **Download PNG** to save a high-res image
 (rendered offscreen by the same renderer). You can also **upload a PDB or SDF
 file**; it is parsed in WASM and never leaves the browser.
 
-```
+```text
 web/index.html ──> ./main.js ──> ./pkg/molscene_wasm.js   (core + wgpu Renderer, WASM)
                                   Renderer.create(canvas) → loadSpecJson → draw()/toPng()
 ```

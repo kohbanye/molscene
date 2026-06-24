@@ -455,6 +455,10 @@ impl Frame {
             )
         });
 
+        // View direction into the scene, for sorting translucent groups by
+        // camera-space depth (not raw distance to the eye — which mis-orders
+        // groups off to the side of the view axis).
+        let view_dir = math::normalize(sub(spec.camera.center, eye));
         let mut opaque_meshes: Vec<MeshDraw> = Vec::new();
         let mut transparent_meshes: Vec<MeshDraw> = Vec::new();
         for mesh in &spec.meshes {
@@ -504,7 +508,8 @@ impl Frame {
                 ibuf,
                 nindices: mesh.indices.len() as u32,
                 bind,
-                depth_key: vlen(sub(centroid, eye)),
+                // Depth along the view axis: larger = farther from the camera.
+                depth_key: math::dot(sub(centroid, eye), view_dir),
             };
             if mesh.opacity < 1.0 {
                 transparent_meshes.push(draw);
@@ -588,6 +593,24 @@ pub fn depth_view(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Textu
         view_formats: &[],
     });
     tex.create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+/// Largest supersampled dimension we'll attempt — a guard against overflow and
+/// absurd allocations from caller-supplied sizes.
+pub const MAX_DIM: u32 = 16384;
+
+/// Compute the supersampled render size `(width·ssaa, height·ssaa)`, validating
+/// against `u32` overflow and [`MAX_DIM`]. `ssaa`/dimensions are floored to 1.
+pub fn render_size(width: u32, height: u32, ssaa: u32) -> Result<(u32, u32), String> {
+    let ssaa = ssaa.max(1);
+    let w = width.max(1).checked_mul(ssaa);
+    let h = height.max(1).checked_mul(ssaa);
+    match (w, h) {
+        (Some(w), Some(h)) if w <= MAX_DIM && h <= MAX_DIM => Ok((w, h)),
+        _ => Err(format!(
+            "{width}×{height} at {ssaa}× supersampling exceeds the {MAX_DIM}px limit"
+        )),
+    }
 }
 
 /// Box-downsample an RGBA8 image by an integer factor.

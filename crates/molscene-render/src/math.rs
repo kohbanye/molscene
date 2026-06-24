@@ -107,6 +107,22 @@ mod tests {
     }
 
     #[test]
+    fn perspective_maps_near_and_far_to_webgpu_depth_range() {
+        // The depth contract the impostor shaders rely on: a right-handed view
+        // (looking down −z) maps near → 0 and far → 1 after the perspective
+        // divide. A sign/layout regression in `perspective_rh_zo` breaks depth.
+        let (near, far) = (0.1f32, 100.0f32);
+        let p = perspective_rh_zo(1.0, 1.5, near, far);
+        let project_z = |z: f32| {
+            let clip_z = p[10] * z + p[14]; // col2.row2 * z + col3.row2
+            let clip_w = p[11] * z; // col2.row3 * z  (w = −z)
+            clip_z / clip_w
+        };
+        assert!(project_z(-near).abs() < 1e-5, "near should map to 0");
+        assert!((project_z(-far) - 1.0).abs() < 1e-5, "far should map to 1");
+    }
+
+    #[test]
     fn look_at_puts_eye_at_origin_of_view() {
         // The eye maps to the view-space origin.
         let v = look_at_rh([0.0, 0.0, 5.0], [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]);

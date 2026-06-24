@@ -230,8 +230,7 @@ impl Inner {
         ssaa: u32,
     ) -> Result<Vec<u8>, JsValue> {
         let ssaa = ssaa.max(1);
-        let w = width.max(1) * ssaa;
-        let h = height.max(1) * ssaa;
+        let (w, h) = gpu::render_size(width, height, ssaa).map_err(|e| JsValue::from_str(&e))?;
 
         let frame = Frame::build(
             &self.device,

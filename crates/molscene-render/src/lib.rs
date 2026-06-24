@@ -65,6 +65,9 @@ pub enum RenderError {
     Readback(String),
     /// PNG encoding failed.
     Encode(String),
+    /// The requested output size (× supersampling) overflows or exceeds the
+    /// maximum renderable dimension.
+    InvalidSize(String),
 }
 
 impl std::fmt::Display for RenderError {
@@ -78,6 +81,7 @@ impl std::fmt::Display for RenderError {
             RenderError::NoDevice(e) => write!(f, "could not create GPU device: {e}"),
             RenderError::Readback(e) => write!(f, "GPU readback failed: {e}"),
             RenderError::Encode(e) => write!(f, "PNG encoding failed: {e}"),
+            RenderError::InvalidSize(e) => write!(f, "invalid render size: {e}"),
         }
     }
 }
@@ -97,8 +101,8 @@ async fn render_png_async(
     opts: &RenderOptions,
 ) -> Result<Vec<u8>, RenderError> {
     let ssaa = opts.ssaa.max(1);
-    let w = opts.width.max(1) * ssaa;
-    let h = opts.height.max(1) * ssaa;
+    let (w, h) =
+        gpu::render_size(opts.width, opts.height, ssaa).map_err(RenderError::InvalidSize)?;
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
     let adapter = instance

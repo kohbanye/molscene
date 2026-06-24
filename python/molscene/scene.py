@@ -325,10 +325,11 @@ class Scene:
     def to_png(self, *, width: int = 800, height: int = 600, ssaa: int = 2) -> bytes:
         """Render the scene to PNG bytes with the native Rust GPU rasterizer.
 
-        Unlike :meth:`show` (which hands the geometry to Three.js in the
-        browser), this rasterizes the same ``GeometrySpec`` headlessly in Rust
-        via ``wgpu`` — spheres and bonds are drawn as ray-traced impostors —
-        so it works without a notebook or browser::
+        This is the same ``wgpu`` renderer (same ``GeometrySpec``, camera
+        framing, and lighting) that :meth:`show` runs in the browser via
+        WebGPU — here it rasterizes headlessly in Rust, with spheres and bonds
+        drawn as ray-traced impostors, so it works without a notebook or
+        browser::
 
             png = ms.load("1ubq").cartoon().to_png(width=1200, height=900)
 

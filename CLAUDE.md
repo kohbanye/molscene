@@ -43,7 +43,7 @@ JavaScript renderer (the old Three.js `viewer/` was removed).
 
 The pipeline from `ms.load()` to pixels — three frontends, **one renderer**:
 
-```
+```text
 ms.load(id)           # __init__.py: fetch RCSB / read file → PDB text
   → _core.Scene.from_pdb(text, source)   # parse in Rust → Scene holds a Structure
 .cartoon()/.sticks()/... # scene.py: record representations (no geometry yet)

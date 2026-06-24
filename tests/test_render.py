@@ -25,11 +25,17 @@ def _png_size(data: bytes) -> tuple[int, int]:
 
 
 def _render(scene, **kw):
-    """Render, skipping the test if the environment has no GPU adapter."""
+    """Render, skipping the test only when no GPU adapter is available.
+
+    Other render failures (device creation, readback, encode) are real
+    regressions and must propagate, not be silently skipped.
+    """
     try:
         return scene.to_png(**kw)
     except RuntimeError as e:
-        pytest.skip(f"no GPU available for rendering: {e}")
+        if "no GPU adapter" in str(e):
+            pytest.skip(f"no GPU available for rendering: {e}")
+        raise
 
 
 def test_to_png_returns_a_sized_png():

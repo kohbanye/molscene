@@ -237,7 +237,10 @@ impl Scene {
             height,
             ssaa,
         };
-        let bytes = molscene_render::render_png(&spec, &opts)
+        // The render is independent of Python state; drop the GIL so it doesn't
+        // serialize other Python threads for the full GPU setup/readback.
+        let bytes = py
+            .detach(|| molscene_render::render_png(&spec, &opts))
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         Ok(PyBytes::new(py, &bytes))
     }

@@ -55,6 +55,11 @@ fn fs_main(in: VsOut) -> FsOut {
     let pa = in.start;
     let axis = in.end - in.start;
     let len = length(axis);
+    // Degenerate bond (coincident endpoints): no axis direction — skip it
+    // instead of dividing by zero (which would make `va` NaN).
+    if (len < 1e-6) {
+        discard;
+    }
     let va = axis / len;
     let r = in.radius;
 

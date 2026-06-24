@@ -67,7 +67,14 @@ function resizeToDisplay() {
 /** Draw the loaded geometry with the current camera, if ready. */
 function draw() {
   if (!renderer || !currentScene) return;
-  renderer.draw(camera.yaw, camera.pitch, camera.zoom);
+  try {
+    renderer.draw(camera.yaw, camera.pitch, camera.zoom);
+  } catch (err) {
+    // A transient WebGPU failure (e.g. a lost/reconfigured surface) shouldn't
+    // wedge interaction; report it and let the next pointer/resize event retry.
+    console.error("draw failed:", err);
+    setStatus(`render error: ${err}`);
+  }
 }
 
 /** Swap in a new scene (resetting the orbit) and draw it. The renderer consumes
