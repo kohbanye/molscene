@@ -29,6 +29,14 @@ console_error_panic_hook = ["dep:console_error_panic_hook"]
 molscene-core = { path = "../molscene-core", default-features = false, features = [
     "parse",
 ] }
+# The shared GPU renderer (wgpu): drives both the canvas display and PNG export
+# in the browser. Compiles to wasm32 (WebGPU backend).
+molscene-render = { path = "../molscene-render" }
+wgpu = "24"
 serde_json = { workspace = true }
 wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+futures-channel = "0.3"
+web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
 console_error_panic_hook = { version = "0.1", optional = true }

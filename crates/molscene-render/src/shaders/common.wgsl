@@ -1,7 +1,7 @@
 // Shared camera uniform + shading, prepended to each pipeline's WGSL at build
-// time (WGSL has no `#include`). The shading rig mirrors the Three.js viewer:
-// a hemisphere ambient (sky white / ground 0x444444, intensity 0.6) plus a key
-// (1,1,1)·0.8 and fill (-1,0.5,-0.5)·0.3 directional pair, in world space.
+// time (WGSL has no `#include`). The shading rig: a hemisphere ambient (sky
+// white / ground 0x444444, intensity 0.6) plus a key (1,1,1)·0.8 and fill
+// (-1,0.5,-0.5)·0.3 directional pair, in world space.
 
 struct Camera {
     view_proj: mat4x4<f32>,

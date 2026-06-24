@@ -2,7 +2,7 @@
 //! draw list (`GeometrySpec`) of instanced spheres and cylinders.
 //!
 //! This is the lower-level contract consumed by the molecule-agnostic renderer
-//! (Three.js today; wgpu later). It is pure compute — no pdbtbx, no rendering —
+//! (the wgpu rasterizer in `molscene-render`). It is pure compute — no pdbtbx, no rendering —
 //! so it is WASM-safe. Supports spheres, sticks, cartoon ribbons, and molecular
 //! surfaces (all tessellated natively).
 
@@ -117,7 +117,7 @@ impl Default for Mesh {
     }
 }
 
-/// A text annotation drawn as a camera-facing billboard (Three.js sprite) at a
+/// A text annotation drawn as a camera-facing billboard at a
 /// world-space `position`. molscene picks the position, text, and color in Rust;
 /// the renderer only rasterizes the glyphs. `size` is a font scale the renderer
 /// turns into an on-screen size.
