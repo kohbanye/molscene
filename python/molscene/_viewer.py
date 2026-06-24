@@ -91,7 +91,8 @@ _BOOTSTRAP = """
     if (!dragging) return;
     cam.yaw -= (e.clientX - lastX) * 0.01;
     const lim = Math.PI / 2 - 0.01;
-    cam.pitch = Math.max(-lim, Math.min(lim, cam.pitch + (e.clientY - lastY) * 0.01));
+    // Subtract dy so a downward drag tilts the top toward the viewer (matches yaw).
+    cam.pitch = Math.max(-lim, Math.min(lim, cam.pitch - (e.clientY - lastY) * 0.01));
     lastX = e.clientX; lastY = e.clientY;
     renderer.draw(cam.yaw, cam.pitch, cam.zoom);
   });
