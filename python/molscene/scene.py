@@ -343,7 +343,7 @@ class Scene:
     ) -> str:
         """Render the scene and write it to ``path`` as a PNG. Returns ``path``::
 
-            ms.load("1ubq").cartoon(color="spectrum").save_png("ubq.png")
+        ms.load("1ubq").cartoon(color="spectrum").save_png("ubq.png")
         """
         with open(path, "wb") as fh:
             fh.write(self.to_png(width=width, height=height, ssaa=ssaa))

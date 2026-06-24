@@ -47,7 +47,9 @@ _BOOTSTRAP = """
   const msg = document.getElementById('msg');
   const canvas = document.getElementById('viewport');
   if (!('gpu' in navigator)) {
-    msg.textContent = 'This browser has no WebGPU support, so molscene cannot draw here. Use Scene.save_png(...) for an image, or open in a recent Chrome/Edge.';
+    msg.textContent =
+      'This browser has no WebGPU support, so molscene cannot draw here. ' +
+      'Use Scene.save_png(...) for an image, or open a recent Chrome/Edge.';
     msg.style.display = 'block';
     return;
   }
@@ -79,7 +81,12 @@ _BOOTSTRAP = """
     renderer.draw(cam.yaw, cam.pitch, cam.zoom);
   }
   let dragging = false, lastX = 0, lastY = 0;
-  canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+  });
   canvas.addEventListener('pointermove', (e) => {
     if (!dragging) return;
     cam.yaw -= (e.clientX - lastX) * 0.01;
