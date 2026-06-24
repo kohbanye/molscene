@@ -4,8 +4,9 @@
 //! `molscene_core::Scene` and a `Selection` wrapping a core [`Expr`], built
 //! through constructor statics and composed with `and`/`or`/`not` methods (JS
 //! has no operator overloading, so these replace Python's `& | ~`). The compiled
-//! `GeometrySpec` crosses to JS as the same JSON string the Python iframe uses —
-//! `toGeometryJson()` → `JSON.parse` → the Three.js viewer.
+//! `GeometrySpec` is rendered in the browser by the shared wgpu renderer
+//! ([`Renderer`], in `render`), the same one that powers `Scene.to_png`
+//! natively — `toGeometryJson()` → `Renderer.loadSpecJson` → WebGPU.
 //!
 //! The entire `parse` path (PDB / mmCIF / SDF) is available here: pdbtbx is
 //! WASM-safe in molscene-core (no rayon), so the browser builds a `Scene` from
@@ -15,6 +16,13 @@ use molscene_core::scene::Scene as CoreScene;
 use molscene_core::spec::{RepresentationKind, Source, Style};
 use molscene_core::{CmpOp, Expr, NumField};
 use wasm_bindgen::prelude::*;
+
+// The GPU renderer uses browser-only APIs (canvas surface, WebGPU); it exists
+// only in the wasm build. A plain `cargo build --workspace` (native) skips it.
+#[cfg(target_arch = "wasm32")]
+mod render;
+#[cfg(target_arch = "wasm32")]
+pub use render::Renderer;
 
 /// Install a panic hook so Rust panics surface in the browser console. Runs once
 /// when the wasm module is instantiated.

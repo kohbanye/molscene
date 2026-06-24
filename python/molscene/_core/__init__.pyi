@@ -79,6 +79,13 @@ class Scene:
         r"""
         Compile to the JSON geometry spec (instanced draw list for the renderer).
         """
+    def to_png(self, width: builtins.int = 800, height: builtins.int = 600, ssaa: builtins.int = 2) -> bytes:
+        r"""
+        Render the scene to PNG bytes with the native GPU rasterizer
+        (`molscene-render`, via wgpu). Headless — no window or browser. Returns
+        the PNG file contents as `bytes`. Raises `RuntimeError` if no GPU
+        (or software fallback) is available.
+        """
 
 @typing.final
 class Selection:

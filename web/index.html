@@ -14,6 +14,31 @@
       #viewport {
         position: absolute;
         inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        cursor: grab;
+        touch-action: none;
+      }
+      #viewport:active {
+        cursor: grabbing;
+      }
+      #download {
+        margin-left: 8px;
+        padding: 5px 10px;
+        background: #1a1a1a;
+        color: #fff;
+        border: 0;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      #download:hover {
+        background: #000;
+      }
+      #download:disabled {
+        opacity: 0.5;
+        cursor: default;
       }
       #panel {
         position: absolute;
@@ -96,21 +121,20 @@
         </a>
       </h1>
       <div>
-        The Rust core runs in your browser via WebAssembly — JavaScript builds
-        the <code>Scene</code> and compiles the geometry.
+        The Rust core runs in your browser via WebAssembly. Drag to orbit,
+        scroll to zoom.
       </div>
       <div id="upload">
         <label for="file">Upload PDB or SDF…</label>
         <input id="file" type="file" accept=".pdb,.ent,.sdf,.mol" />
+        <button id="download" disabled>Download PNG</button>
       </div>
       <div id="status">loading…</div>
     </div>
-    <div id="viewport"></div>
+    <canvas id="viewport"></canvas>
 
-    <!-- The Three.js viewer IIFE (copied next to this page by web/build.sh).
-         Exposes window.molscene.renderGeometry(element, spec). -->
-    <script src="./viewer.js"></script>
-    <!-- The demo driver: imports the wasm-pack ES module from ./pkg. -->
+    <!-- The demo driver: imports the wasm-pack ES module from ./pkg. The Rust
+         wgpu renderer draws straight to the canvas above — no Three.js. -->
     <script type="module" src="./main.js"></script>
   </body>
 </html>

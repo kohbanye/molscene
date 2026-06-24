@@ -321,6 +321,35 @@ class Scene:
         """
         return json.loads(self._core.to_geometry_json())
 
+    # -- image export -------------------------------------------------------
+    def to_png(self, *, width: int = 800, height: int = 600, ssaa: int = 2) -> bytes:
+        """Render the scene to PNG bytes with the native Rust GPU rasterizer.
+
+        This is the same ``wgpu`` renderer (same ``GeometrySpec``, camera
+        framing, and lighting) that :meth:`show` runs in the browser via
+        WebGPU — here it rasterizes headlessly in Rust, with spheres and bonds
+        drawn as ray-traced impostors, so it works without a notebook or
+        browser::
+
+            png = ms.load("1ubq").cartoon().to_png(width=1200, height=900)
+
+        ``ssaa`` is the supersampling factor for antialiasing (``1`` disables
+        it). Raises ``RuntimeError`` if no GPU (or software fallback such as
+        SwiftShader/llvmpipe) is available in the environment.
+        """
+        return self._core.to_png(width=width, height=height, ssaa=ssaa)
+
+    def save_png(
+        self, path: str, *, width: int = 800, height: int = 600, ssaa: int = 2
+    ) -> str:
+        """Render the scene and write it to ``path`` as a PNG. Returns ``path``::
+
+        ms.load("1ubq").cartoon(color="spectrum").save_png("ubq.png")
+        """
+        with open(path, "wb") as fh:
+            fh.write(self.to_png(width=width, height=height, ssaa=ssaa))
+        return path
+
     # -- display ------------------------------------------------------------
     def _repr_html_(self) -> str:
         return render_html(self.to_geometry())

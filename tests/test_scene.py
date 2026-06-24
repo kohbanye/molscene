@@ -297,7 +297,7 @@ def test_repr_html_contains_iframe_and_geometry():
     assert "<iframe" in html
     assert "srcdoc=" in html
     assert "molscene-geometry" in html
-    # No 3Dmol anywhere — Three.js is the sole renderer.
+    # No 3Dmol anywhere — the molscene wgpu renderer (WebGPU) is the sole renderer.
     assert "3Dmol" not in html and "3dmol" not in html
 
 
@@ -307,7 +307,7 @@ def test_export_html_is_self_contained(tmp_path):
     text = out.read_text()
     assert text.startswith("<iframe")
     # Fully offline: nothing is loaded from the network. (URL strings may appear
-    # inside the inlined Three.js bundle's license comments — that's fine; what
+    # inside the inlined wasm-bindgen glue's comments — that's fine; what
     # matters is no external <script src>/<link href>.)
     assert 'src="http' not in text and "src=&quot;http" not in text
     assert "<link" not in text

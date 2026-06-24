@@ -13,6 +13,7 @@ scene = (
     .spheres(ms.select.hetero(), color="element")
 )
 scene.show()   # interactive 3D in Jupyter / Colab
+scene.save_png("ubq.png")   # or render to a PNG natively in Rust — no browser
 ```
 
 Representations pick sensible defaults: `cartoon()`/`surface()` show the protein,
@@ -28,36 +29,43 @@ Python fluent API ─┐
 browser / JS API  ─┤                          ├─ molscene-core (pure Rust)
                    └─ molscene-wasm            ┘   Structure / Scene / Selection / geometry
                                                         │ to_geometry()
-                                              GeometrySpec (instanced spheres + cylinders)
+                                                  GeometrySpec  (the one wire format)
                                                         ↓
-                                              viewer/ (Three.js — knows nothing about molecules)
-                                                        ↓
-                                                  notebook / browser
+                                          molscene-render (wgpu, one renderer)
+                                       ┌──────────────┼───────────────────────┐
+                                  native PNG      browser canvas        notebook iframe
+                                 .to_png()/        (web/ demo,           (show()/_repr_html_,
+                                 .save_png()       WebGPU)               WASM + WebGPU)
 ```
 
 molscene owns all molecular processing (parse, selection, **geometry generation**,
-color) in Rust and treats the renderer as a dumb 3D canvas. v0.1 renders
-**spheres** and **sticks**; cartoon/surface are a follow-up.
+color) in Rust, and renders the resulting `GeometrySpec` with a single wgpu
+renderer — natively to a PNG and, compiled to WebAssembly, straight to a browser
+canvas (WebGPU). The renderer knows nothing about molecules; it only draws the
+`GeometrySpec`.
 
 - **`crates/molscene-core`** — renderer- and binding-agnostic engine (Rust): structure,
   selection, color, and geometry compilation to a `GeometrySpec`.
+- **`crates/molscene-render`** — the wgpu rasterizer (impostor spheres/bonds + meshes);
+  one renderer for native PNG and, compiled to wasm, the browser canvas.
 - **`crates/molscene-py`** — PyO3 bindings → the `molscene._core` extension module.
-- **`crates/molscene-wasm`** — wasm-bindgen bindings for the future browser product.
+- **`crates/molscene-wasm`** — wasm-bindgen bindings: the `Scene`/`Selection` API plus a
+  WebGPU `Renderer` that draws the `GeometrySpec` to a canvas.
 - **`python/molscene`** — thin fluent facade, notebook display.
-- **`viewer/`** — Three.js adapter that draws a `GeometrySpec` (instanced meshes).
 
 ## Pure-web / WASM
 
-The same Rust core runs in the browser — zero Python. `molscene-wasm` exposes the
-identical `Scene` / `Selection` API via wasm-bindgen, builds the scene and compiles
-`to_geometry` entirely in WebAssembly, and hands the resulting `GeometrySpec` (the
-only wire format, byte-for-byte the same one the notebook path uses) to the existing
-Three.js viewer. PDB / mmCIF / SDF all parse in the browser. See
-[`web/README.md`](web/README.md):
+The same Rust core **and renderer** run in the browser — zero Python.
+`molscene-wasm` exposes the identical `Scene` / `Selection` API via wasm-bindgen,
+builds the scene and compiles `to_geometry` entirely in WebAssembly, and draws the
+resulting `GeometrySpec` (the only wire format, byte-for-byte the same one the
+notebook and native PNG paths use) with the wgpu `Renderer` straight to a `<canvas>`
+via WebGPU — drag to orbit, scroll to zoom, and download a PNG. PDB / mmCIF / SDF all
+parse in the browser. See [`web/README.md`](web/README.md):
 
 ```sh
-./web/build.sh                              # viewer bundle + WASM core → web/
-python3 -m http.server 8000 --directory web # then open http://localhost:8000/
+./web/build.sh                              # wasm-pack (core + wgpu Renderer) → web/pkg
+python3 -m http.server 8000 --directory web # then open http://localhost:8000/ (needs WebGPU)
 ```
 
 A hosted build is published to GitHub Pages (`https://kohbanye.github.io/molscene/`).
@@ -68,8 +76,8 @@ A hosted build is published to GitHub Pages (`https://kohbanye.github.io/molscen
 # Rust core (the main TDD surface — no Python needed)
 cargo test -p molscene-core
 
-# Viewer adapter
-cd viewer && npm install && npm test
+# GPU renderer (skips when no GPU/software-Vulkan adapter is available)
+cargo test -p molscene-render
 
 # Python facade (after building the extension into a venv)
 maturin develop && pytest -m "not network"

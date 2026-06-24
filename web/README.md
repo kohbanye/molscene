@@ -1,18 +1,24 @@
 # molscene web
 
-A browser page where **JavaScript builds a scene and renders it**. The Rust
-`molscene-core` engine is compiled to WebAssembly (`molscene-wasm`); JS calls
-the same typed `Scene` / `Selection` API the Python facade uses, compiles to a
-`GeometrySpec` in the browser, and hands that spec — the one and only
-serialized contract — to the existing Three.js viewer.
+A browser page where **JavaScript builds a scene and the Rust wgpu renderer
+draws it**. The `molscene-core` engine *and* the `molscene-render` renderer are
+compiled to WebAssembly (`molscene-wasm`); JS calls the same typed `Scene` /
+`Selection` API the Python facade uses, compiles to a `GeometrySpec` in the
+browser, and hands that spec — the one and only serialized contract — to the
+wgpu `Renderer`, which draws straight to a `<canvas>` via **WebGPU**. The same
+renderer powers `Scene.to_png()` natively; there is no JavaScript renderer.
 
-You can also **upload a PDB or SDF file** from the page to view your own
-structures; the file is parsed in WASM and never leaves the browser.
+Drag to orbit, scroll to zoom, and **Download PNG** to save a high-res image
+(rendered offscreen by the same renderer). You can also **upload a PDB or SDF
+file**; it is parsed in WASM and never leaves the browser.
 
+```text
+web/index.html ──> ./main.js ──> ./pkg/molscene_wasm.js   (core + wgpu Renderer, WASM)
+                                  Renderer.create(canvas) → loadSpecJson → draw()/toPng()
 ```
-web/index.html ──> ./viewer.js               (renderGeometry; copied by build.sh)
-              └──> ./main.js ──> ./pkg/molscene_wasm.js   (the WASM core)
-```
+
+Requires a **WebGPU-capable browser** (recent Chrome/Edge; Firefox/Safari with
+WebGPU enabled). Without WebGPU the page shows a short message.
 
 ## Hosted demo
 
@@ -29,7 +35,6 @@ Prerequisites (one-time):
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack        # or: cargo binstall wasm-pack
-# Node.js is needed for the viewer bundle.
 ```
 
 Then:
@@ -38,13 +43,9 @@ Then:
 ./web/build.sh
 ```
 
-This builds the demo's artifacts (all **generated, gitignored**):
-
-- `web/viewer.js` — the Three.js viewer IIFE (`window.molscene.renderGeometry`),
-  built by esbuild and copied next to the page (reused unchanged from the
-  notebook path).
-- `web/pkg/` — the wasm-pack output (`molscene_wasm.js` + `molscene_wasm_bg.wasm`),
-  an ES module the page imports.
+This builds `web/pkg/` — the wasm-pack output (`molscene_wasm.js` +
+`molscene_wasm_bg.wasm`), an ES module the page imports (**generated,
+gitignored**).
 
 ## Serve
 
@@ -58,9 +59,9 @@ python3 -m http.server 8000 --directory web
 
 The demo fetches `1UBQ` from RCSB (CORS-enabled) and draws a **cartoon** in the
 browser. If the network is unavailable it falls back to an embedded benzene SDF
-drawn as aromatic **sticks** — both built entirely in WASM. Use the **Upload
-PDB or SDF…** button to load your own file (extension picks the parser: `.sdf` /
-`.mol` → sticks, anything else → PDB cartoon + sticks).
+drawn as aromatic **sticks** — both built and rendered entirely in WASM/WebGPU.
+Use the **Upload PDB or SDF…** button to load your own file (extension picks the
+parser: `.sdf` / `.mol` → sticks, anything else → PDB cartoon + sticks).
 
 ## Notes
 

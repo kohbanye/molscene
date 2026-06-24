@@ -7,9 +7,11 @@ about dates. See `README.md` for the vision and `CLAUDE`/source for current code
 
 These constrain every milestone below:
 
-- **Rust owns the molecule.** Parsing, selection, neighbor search, geometry
-  generation, and color resolution live in `molscene-core`. The renderer is a
-  dumb 3D canvas (Three.js today) that knows nothing about molecules.
+- **Rust owns the molecule *and* the renderer.** Parsing, selection, neighbor
+  search, geometry generation, and color resolution live in `molscene-core`;
+  rendering lives in `molscene-render` (wgpu). The renderer is a dumb 3D canvas
+  that knows nothing about molecules — it only draws a `GeometrySpec`. One
+  renderer serves every frontend: native PNG, browser canvas, notebook.
 - **Scenes are declarative.** You describe *what* to show; molscene compiles it.
   No imperative `cmd.show(...)` clone — state lives in an in-memory `Scene` built
   through a typed, composable API. The *building code* is the source of truth;
@@ -24,13 +26,14 @@ These constrain every milestone below:
   WASM-safe; only `parse` (pdbtbx) is native-gated. A pure-browser/WASM product is
   a real goal: the same Rust core builds the `Scene` and emits a `GeometrySpec`
   from JS via wasm-bindgen — no Python, and still no Scene wire format.
-- **TDD, every layer.** `cargo test` (incl. insta snapshots), `vitest`, `pytest`
-  stay green; the geometry pipeline is the main test surface.
+- **TDD, every layer.** `cargo test` (incl. insta snapshots and the
+  `molscene-render` GPU test) and `pytest` stay green; the geometry pipeline is
+  the main test surface.
 
 ## Status (done)
 
-- **Workspace & tooling**: 3-crate Cargo workspace, maturin packaging, CI
-  (cargo/vitest/pytest), TDD across layers.
+- **Workspace & tooling**: 4-crate Cargo workspace, maturin packaging, CI
+  (cargo/pytest + wasm smoke build), TDD across layers.
 - **Core engine** (`molscene-core`): `Structure` model, pdbtbx PDB/mmCIF parser
   (`parse` feature, native-only), declarative `Scene` + JSON spec, distance-based
   bond inference, single-clause selection evaluator, color resolution
@@ -39,8 +42,10 @@ These constrain every milestone below:
 - **Python** (`molscene`): PyO3 `Scene`/`Selection`, `ms.load` (RCSB fetch or
   local file → parsed in Rust), `ms.select` DSL with `& | ~`, fluent API,
   `_repr_html_` / `show` / `export_html` via iframe srcdoc.
-- **Viewer** (`viewer/`): Three.js renderer — instanced spheres + cylinders,
-  oriented-box auto-framing camera, OrbitControls; bundled offline (no CDN).
+- **Renderer** (`molscene-render`, v0.9): a single wgpu rasterizer — impostor
+  spheres/bonds + meshes, oriented-box auto-framing camera — for native PNG and,
+  compiled to wasm, the browser canvas + notebook. (The original Three.js
+  `viewer/` was removed.)
 - **Selections** (v0.2): a fully-evaluated selection language in Rust — boolean
   `and`/`or`/`not`, spatial `around`/`within`/`expand`/`beyond` (kiddo k-d tree),
   aggregation `byres`/`bychain`/`bymol`, numeric `b`/`q`, parsed from a string and
@@ -384,6 +389,46 @@ Proves the dual-core thesis: the same Rust core drives both Python and the brows
 
 **Deliverable:** a browser page where JS builds a scene and renders it — zero
 Python. ✅
+
+## v0.9 — One wgpu renderer everywhere (Three.js removed) ✅ (shipped)
+
+Rust owns rendering too, not just the molecule. A single wgpu rasterizer for the
+`GeometrySpec` contract replaces the Three.js `viewer/` entirely — it produces a
+PNG headlessly **and**, compiled to WebAssembly, draws straight to a browser
+canvas. This is the long-signposted "wgpu later" path.
+
+- **`molscene-render` crate** (wgpu): consumes the serialized `GeometrySpec` only —
+  molecule-agnostic. The shared core (`gpu.rs`: pipelines + per-frame buffers + draw
+  recording) **compiles for both native and `wasm32`**; only the platform glue is
+  cfg-gated. The crate's `render_png(spec, opts)` is the native headless path
+  (request adapter → render-to-texture → read back → encode PNG, supersampled AA).
+  Depends on `molscene-core`, never the reverse; wgpu stays out of core.
+- **Impostor primitives.** Spheres and cylinders are GPU impostors: a camera-facing
+  quad per instance, and the fragment shader ray-traces the exact sphere / finite
+  cylinder (lateral + flat caps), writing per-pixel depth so they interpenetrate
+  meshes and each other correctly and stay perfectly smooth at any zoom. Cartoon /
+  surface meshes are drawn directly (double-sided, depth-sorted transparency for
+  translucent groups). Camera framing (45° FOV, aspect-aware oriented-box fit) and
+  the hemisphere + key/fill lighting rig are shared, so every frontend matches.
+- **Browser renderer** (`molscene-wasm`): a wasm-bindgen `Renderer` bound to a
+  `<canvas>` via WebGPU — `loadSpecJson` then `draw(yaw, pitch, zoom)` (drag-orbit +
+  zoom) for live display, and async `toPng(w, h, ssaa)` for a downloadable image.
+  The `web/` demo and the notebook both drive it; the old Three.js `viewer/` crate,
+  its vitest job, and the JS renderer are deleted.
+- **Notebook display**: `show()` / `_repr_html_` now inline the WASM bundle (core +
+  wgpu `Renderer`, built `--target no-modules`) and the `GeometrySpec` into the
+  iframe `srcdoc`, and render on a canvas via WebGPU — still fully self-contained and
+  offline. A browser without WebGPU shows a short message (use `save_png`).
+- **Python API**: `scene.to_png(width, height, ssaa) -> bytes` and
+  `scene.save_png(path, ...)` (a thin PyO3 wrapper over `render_png`; stubs
+  regenerated).
+- **Graceful degradation**: native, with no GPU/Vulkan/Metal/DX12/GL driver (and no
+  software fallback like SwiftShader/llvmpipe), `render_png` returns `NoAdapter` and
+  the Rust + Python tests skip rather than fail.
+
+**Deliverables:** `ms.load("1ubq").cartoon(color="spectrum").save_png("ubq.png")`
+writes a rendered image with zero browser involvement; the same scene renders in a
+notebook and in the `web/` demo via the *same* wgpu renderer compiled to wasm. ✅
 
 ## v1.0 — Distribution & ergonomics
 
