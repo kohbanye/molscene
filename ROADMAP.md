@@ -385,6 +385,37 @@ Proves the dual-core thesis: the same Rust core drives both Python and the brows
 **Deliverable:** a browser page where JS builds a scene and renders it — zero
 Python. ✅
 
+## v0.9 — Native rendering / image export ✅ (shipped)
+
+Rust owns rendering too, not just the molecule: a second renderer for the same
+`GeometrySpec` contract that produces a PNG headlessly — no browser, no Three.js,
+no Python display loop. This is the long-signposted "wgpu later" path
+(`geometry.rs`: "Three.js today; wgpu later").
+
+- **`molscene-render` crate** (wgpu): consumes the serialized `GeometrySpec` only —
+  molecule-agnostic, exactly like the Three.js viewer. `render_png(spec, opts)`
+  renders headlessly (request adapter → render-to-texture → read back → encode PNG),
+  with supersampled antialiasing. Depends on `molscene-core`; **native-only**, kept
+  out of the WASM build (wgpu is heavy and native).
+- **Impostor primitives.** Spheres and cylinders are GPU impostors: a camera-facing
+  quad per instance, and the fragment shader ray-traces the exact sphere / finite
+  cylinder (lateral + flat caps), writing per-pixel depth so they interpenetrate
+  meshes and each other correctly and stay perfectly smooth at any zoom. Cartoon /
+  surface meshes are drawn directly (double-sided, depth-sorted transparency for
+  translucent groups).
+- **Visual parity with the viewer.** Camera framing (45° FOV, aspect-aware oriented-
+  box fit) and the lighting rig (hemisphere + key/fill) mirror `threejsRenderer.ts`,
+  so the native PNG and the browser view look consistent.
+- **Python API**: `scene.to_png(width, height, ssaa) -> bytes` and
+  `scene.save_png(path, ...)`. The GIL-side binding is a thin PyO3 wrapper over
+  `render_png`; stubs regenerated.
+- **Graceful headless degradation**: with no GPU/Vulkan/Metal/DX12/GL driver (and no
+  software fallback like SwiftShader/llvmpipe), `render_png` returns `NoAdapter` and
+  the Rust + Python tests skip rather than fail.
+
+**Deliverable:** `ms.load("1ubq").cartoon(color="spectrum").save_png("ubq.png")`
+writes a rendered image with zero browser involvement. ✅
+
 ## v1.0 — Distribution & ergonomics
 
 - **PyPI wheels** ✅: a maturin `Release` workflow (`.github/workflows/

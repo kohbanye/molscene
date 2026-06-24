@@ -4,6 +4,7 @@ members = [
     "crates/molscene-core",
     "crates/molscene-py",
     "crates/molscene-wasm",
+    "crates/molscene-render",
 ]
 
 [workspace.package]
@@ -17,3 +18,4 @@ authors = ["Koh Sakano"]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 molscene-core = { path = "crates/molscene-core" }
+molscene-render = { path = "crates/molscene-render" }

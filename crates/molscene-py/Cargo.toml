@@ -19,6 +19,8 @@ doctest = false
 
 [dependencies]
 molscene-core = { workspace = true }
+# GPU rasterizer for `Scene.to_png` (renders the GeometrySpec headlessly).
+molscene-render = { workspace = true }
 serde_json = { workspace = true }
 # `abi3-py310` builds against the stable ABI (matching requires-python >=3.10),
 # so a single wheel per platform covers all supported CPython versions.

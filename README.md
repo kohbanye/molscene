@@ -13,6 +13,7 @@ scene = (
     .spheres(ms.select.hetero(), color="element")
 )
 scene.show()   # interactive 3D in Jupyter / Colab
+scene.save_png("ubq.png")   # or render to a PNG natively in Rust — no browser
 ```
 
 Representations pick sensible defaults: `cartoon()`/`surface()` show the protein,
@@ -30,9 +31,9 @@ browser / JS API  ─┤                          ├─ molscene-core (pure Rus
                                                         │ to_geometry()
                                               GeometrySpec (instanced spheres + cylinders)
                                                         ↓
-                                              viewer/ (Three.js — knows nothing about molecules)
-                                                        ↓
-                                                  notebook / browser
+                                  ┌─ viewer/ (Three.js)     → notebook / browser
+                                  └─ molscene-render (wgpu) → PNG  (.to_png / .save_png)
+                                     both consume the GeometrySpec; neither knows about molecules
 ```
 
 molscene owns all molecular processing (parse, selection, **geometry generation**,

@@ -1,0 +1,18 @@
+[package]
+name = "molscene-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "GPU rasterizer (wgpu) that renders a molscene GeometrySpec to a PNG image, headlessly."
+
+[dependencies]
+# The renderer only consumes a GeometrySpec — it needs no parser of its own; the
+# examples/tests that build scenes from text use the `parse` feature, which is
+# already enabled workspace-wide via molscene-py.
+molscene-core = { workspace = true }
+wgpu = "24"
+pollster = "0.4"
+bytemuck = { version = "1", features = ["derive"] }
+png = "0.17"
+

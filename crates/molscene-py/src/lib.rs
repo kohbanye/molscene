@@ -10,8 +10,9 @@
 use molscene_core::scene::Scene as CoreScene;
 use molscene_core::spec::{RepresentationKind, Source, Style};
 use molscene_core::{CmpOp, Expr, NumField};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
 fn kind_name(kind: RepresentationKind) -> &'static str {
@@ -216,6 +217,29 @@ impl Scene {
     /// Compile to the JSON geometry spec (instanced draw list for the renderer).
     fn to_geometry_json(&self) -> String {
         self.inner.to_geometry_json()
+    }
+
+    /// Render the scene to PNG bytes with the native GPU rasterizer
+    /// (`molscene-render`, via wgpu). Headless — no window or browser. Returns
+    /// the PNG file contents as `bytes`. Raises `RuntimeError` if no GPU
+    /// (or software fallback) is available.
+    #[pyo3(signature = (width=800, height=600, ssaa=2))]
+    fn to_png<'py>(
+        &self,
+        py: Python<'py>,
+        width: u32,
+        height: u32,
+        ssaa: u32,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let spec = self.inner.to_geometry();
+        let opts = molscene_render::RenderOptions {
+            width,
+            height,
+            ssaa,
+        };
+        let bytes = molscene_render::render_png(&spec, &opts)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        Ok(PyBytes::new(py, &bytes))
     }
 }
 
